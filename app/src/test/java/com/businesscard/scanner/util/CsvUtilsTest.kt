@@ -121,6 +121,8 @@ class CsvUtilsTest {
         val map = CsvUtils.mapCsvHeaders(headers)
         assertTrue("phone column must be recognised", map.containsKey("phone"))
         assertTrue("email column must be recognised", map.containsKey("email"))
+        assertTrue("notes column must be recognised", map.containsKey("notes"))
+        assertTrue("tags column must be recognised", map.containsKey("tags"))
     }
 
     @Test fun `card data appears in correct columns`() {
@@ -128,7 +130,9 @@ class CsvUtilsTest {
             personName = "Jane Doe",
             companyName = "Acme",
             email = "jane@acme.com",
-            phone = "+61 2 1234 5678"
+            phone = "+61 2 1234 5678",
+            notes = "Met at conference",
+            tags = "vip,partner"
         )
         val csv = CsvUtils.buildCsv(listOf(card))
         val lines = csv.lines().filter { it.isNotBlank() }
@@ -141,14 +145,16 @@ class CsvUtilsTest {
         assertEquals("Acme", row[map["company"]!!])
         assertEquals("jane@acme.com", row[map["email"]!!])
         assertEquals("+61 2 1234 5678", row[map["phone"]!!])
+        assertEquals("Met at conference", row[map["notes"]!!])
+        assertEquals("vip,partner", row[map["tags"]!!])
     }
 
     @Test fun `commas in field values properly escaped`() {
         val card = BusinessCard(personName = "Smith, John", email = "j@example.com")
         val csv = CsvUtils.buildCsv(listOf(card))
         val row = CsvUtils.parseCsvLine(csv.lines().filter { it.isNotBlank() }[1])
-        // The name "Smith, John" has comma so will be split as first="Smith" last="John"
-        // but the actual test is that parseCsvLine recovers the correct field count
-        assertEquals(9, row.size)
+        // 11 columns: firstName, lastName, company, jobTitle, phone, mobile, email,
+        // website, address, notes, tags
+        assertEquals(11, row.size)
     }
 }

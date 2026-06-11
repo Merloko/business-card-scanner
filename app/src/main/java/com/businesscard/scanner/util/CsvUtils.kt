@@ -27,9 +27,10 @@ object CsvUtils {
     }
 
     fun mapCsvHeaders(headers: List<String>): Map<String, Int> {
+        val nonAlpha = Regex("[^a-z ]")
         val map = mutableMapOf<String, Int>()
         headers.forEachIndexed { i, h ->
-            when (h.trim().lowercase().replace(Regex("[^a-z ]"), "")) {
+            when (h.trim().lowercase().replace(nonAlpha, "")) {
                 "first name", "firstname", "given name" -> map["firstName"] = i
                 "last name", "lastname", "surname", "family name" -> map["lastName"] = i
                 "name", "full name", "fullname", "display name", "contact name" -> map["fullName"] = i
@@ -58,7 +59,8 @@ object CsvUtils {
     fun buildCsv(cards: List<BusinessCard>): String {
         val header = listOf(
             "First Name", "Last Name", "Company", "Job Title",
-            "Business Phone", "Mobile Phone", "E-mail Address", "Web Page", "Business Street"
+            "Business Phone", "Mobile Phone", "E-mail Address", "Web Page", "Business Street",
+            "Notes", "Tags"
         )
         val rows = cards.map { card ->
             val (first, last) = splitName(card.personName)
@@ -66,7 +68,8 @@ object CsvUtils {
                 first, last, card.companyName, card.jobTitle,
                 card.phone.lines().firstOrNull().orEmpty(),
                 card.mobile.lines().firstOrNull().orEmpty(),
-                card.email, card.website, card.address
+                card.email, card.website, card.address,
+                card.notes, card.tags
             )
         }
         return buildString {

@@ -246,4 +246,69 @@ class VCardParserTest {
         val lines = cards[0].phone.lines().filter { it.isNotBlank() }
         assertEquals(2, lines.size)
     }
+
+    // ──── vCard escape sequence handling ────
+
+    @Test fun `escaped semicolons in ORG field are unescaped`() {
+        val cards = VCardParser.parse("""
+            BEGIN:VCARD
+            VERSION:3.0
+            FN:John Smith
+            ORG:Smith\; Jones & Associates
+            EMAIL:john@example.com
+            END:VCARD
+        """.trimIndent())
+        assertEquals("Smith; Jones & Associates", cards[0].companyName)
+    }
+
+    @Test fun `escaped commas in NOTE field are unescaped`() {
+        val cards = VCardParser.parse("""
+            BEGIN:VCARD
+            VERSION:3.0
+            FN:Jane Doe
+            NOTE:Met at Conf\, 2024
+            EMAIL:jane@example.com
+            END:VCARD
+        """.trimIndent())
+        assertEquals("Met at Conf, 2024", cards[0].notes)
+    }
+
+    @Test fun `escaped backslash in FN field is unescaped`() {
+        val cards = VCardParser.parse("""
+            BEGIN:VCARD
+            VERSION:3.0
+            FN:O\\Brien
+            EMAIL:o@example.com
+            END:VCARD
+        """.trimIndent())
+        assertEquals("O\\Brien", cards[0].personName)
+    }
+
+    @Test fun `ADR with escaped semicolon in address value reassembles correctly`() {
+        val cards = VCardParser.parse("""
+            BEGIN:VCARD
+            VERSION:3.0
+            FN:John Smith
+            ADR;TYPE=WORK:;;Suite 5\; 12 Main St;Sydney;NSW;2000;Australia
+            EMAIL:john@example.com
+            END:VCARD
+        """.trimIndent())
+        val addr = cards[0].address
+        assertTrue("address must contain 'Suite 5; 12 Main St'", addr.contains("Suite 5; 12 Main St"))
+        assertTrue("address must contain Sydney", addr.contains("Sydney"))
+    }
+
+    @Test fun `plain values without backslash are returned unchanged`() {
+        val cards = VCardParser.parse("""
+            BEGIN:VCARD
+            VERSION:3.0
+            FN:Alice Brown
+            ORG:Acme Corp
+            NOTE:No special chars
+            EMAIL:alice@acme.com
+            END:VCARD
+        """.trimIndent())
+        assertEquals("Acme Corp", cards[0].companyName)
+        assertEquals("No special chars", cards[0].notes)
+    }
 }

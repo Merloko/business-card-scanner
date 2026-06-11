@@ -137,7 +137,6 @@ class MyCardActivity : AppCompatActivity() {
                     Toast.makeText(this@MyCardActivity, getString(R.string.nfc_write_success), Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                nfcWritePending = false
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@MyCardActivity, getString(R.string.nfc_write_failed, e.message), Toast.LENGTH_SHORT).show()
                 }
@@ -201,7 +200,12 @@ class MyCardActivity : AppCompatActivity() {
             .apply()
     }
 
-    private fun vcfEscape(s: String) = s.replace("\r", "").replace("\n", " ")
+    private fun vcfEscape(s: String) = s
+        .replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\r", "")
+        .replace("\n", " ")
 
     private fun buildVCard(): String = buildString {
         val name = binding.editName.text.toString().trim()

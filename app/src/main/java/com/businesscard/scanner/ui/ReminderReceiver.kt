@@ -21,7 +21,7 @@ class ReminderReceiver : BroadcastReceiver() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pending = PendingIntent.getActivity(
-            context, cardId.toInt(), openIntent,
+            context, (cardId and 0x7FFFFFFF).toInt(), openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -35,7 +35,7 @@ class ReminderReceiver : BroadcastReceiver() {
             .build()
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(cardId.toInt(), notification)
+        nm.notify((cardId and 0x7FFFFFFF).toInt(), notification)
     }
 
     companion object {

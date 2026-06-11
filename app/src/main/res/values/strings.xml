@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Business Card Scanner 1.4.0</string>
+    <string name="app_name">Business Card Scanner</string>
     <string name="scan_card">Scan Business Card</string>
     <string name="no_cards">No business cards yet.\nTap + to scan your first card!</string>
     <string name="search_hint">Search by name or company…</string>

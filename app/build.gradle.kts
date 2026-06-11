@@ -4,7 +4,7 @@ import java.util.Date
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -23,18 +23,28 @@ android {
     }
 
     val keystorePassword = System.getenv("KEYSTORE_PASSWORD")
-    val keyAliasEnv = System.getenv("KEY_ALIAS")
-    val keyPasswordEnv = System.getenv("KEY_PASSWORD")
-    val hasSigningConfig = keystorePassword != null && keyAliasEnv != null && keyPasswordEnv != null
+    val keystoreAlias = System.getenv("KEY_ALIAS")
+    val keystoreKeyPassword = System.getenv("KEY_PASSWORD")
+    val hasSigningConfig = keystorePassword != null && keystoreAlias != null && keystoreKeyPassword != null
 
     if (hasSigningConfig) {
         signingConfigs {
             create("release") {
                 storeFile = file("release.keystore")
                 storePassword = keystorePassword
-                keyAlias = keyAliasEnv
-                keyPassword = keyPasswordEnv
+                keyAlias = keystoreAlias
+                keyPassword = keystoreKeyPassword
             }
+        }
+    } else {
+        val requestedRelease = gradle.startParameter.taskNames.any { name ->
+            name.contains("release", ignoreCase = true) &&
+            (name.contains("assemble", ignoreCase = true) || name.contains("bundle", ignoreCase = true))
+        }
+        if (requestedRelease) {
+            throw GradleException(
+                "Release build requires KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD env vars."
+            )
         }
     }
 
@@ -113,7 +123,7 @@ dependencies {
     implementation(libs.mlkit.text.japanese)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
-    kapt(libs.room.compiler)
+    ksp(libs.room.compiler)
     implementation(libs.glide)
     implementation(libs.coroutines.android)
     implementation(libs.androidx.viewpager2)

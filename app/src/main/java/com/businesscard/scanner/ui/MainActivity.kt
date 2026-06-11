@@ -340,8 +340,7 @@ class MainActivity : AppCompatActivity() {
                 "Version ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})\n" +
                 "Built: ${BuildConfig.BUILD_DATE}\n\n" +
                 "Scan, store, and search business cards entirely on-device — no account, no cloud, no data leaves your phone.\n\n" +
-                "Open source (LGPL v3)\n" +
-                "github.com/merloko/new-folder\n\n" +
+                "github.com/merloko/business-card-scanner\n\n" +
                 "Libraries\n" +
                 "• CameraX — Apache 2.0\n" +
                 "• ML Kit Text Recognition — Google\n" +
@@ -354,7 +353,7 @@ class MainActivity : AppCompatActivity() {
             .setNeutralButton("View Source") { _, _ ->
                 try {
                     startActivity(Intent(Intent.ACTION_VIEW,
-                        Uri.parse("https://github.com/merloko/new-folder")))
+                        Uri.parse("https://github.com/merloko/business-card-scanner")))
                 } catch (e: ActivityNotFoundException) {
                     Toast.makeText(this, getString(R.string.no_app_for_action), Toast.LENGTH_SHORT).show()
                 }

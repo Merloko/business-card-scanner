@@ -196,7 +196,7 @@
                     android:scaleType="centerCrop"
                     android:clickable="true" android:focusable="true"
                     android:foreground="?attr/selectableItemBackground"
-                    android:contentDescription="@string/front_image"/>
+                    android:contentDescription="@string/front_image_tap"/>
             </LinearLayout>
 
             <LinearLayout android:id="@+id/cardBackContainer"
@@ -210,7 +210,7 @@
                     android:scaleType="centerCrop"
                     android:clickable="true" android:focusable="true"
                     android:foreground="?attr/selectableItemBackground"
-                    android:contentDescription="@string/back_image"/>
+                    android:contentDescription="@string/back_image_tap"/>
             </LinearLayout>
 
             <LinearLayout android:id="@+id/rawOcrSection"

@@ -39,7 +39,7 @@ class MyCardActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("my_card", MODE_PRIVATE) }
 
     private var nfcAdapter: NfcAdapter? = null
-    private var nfcWritePending = false
+    @Volatile private var nfcWritePending = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

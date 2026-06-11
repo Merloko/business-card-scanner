@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.nfc.NdefMessage
+import android.os.Build
 import android.nfc.NdefRecord
 import android.nfc.NfcAdapter
 import android.nfc.Tag
@@ -78,7 +79,12 @@ class MyCardActivity : AppCompatActivity() {
         if (action != NfcAdapter.ACTION_TAG_DISCOVERED &&
             action != NfcAdapter.ACTION_NDEF_DISCOVERED &&
             action != NfcAdapter.ACTION_TECH_DISCOVERED) return
-        val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG) ?: return
+        val tag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+        } ?: return
         writeVCardToTag(tag)
     }
 

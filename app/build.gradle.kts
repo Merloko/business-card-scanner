@@ -22,15 +22,19 @@ android {
         resourceConfigurations += setOf("en", "zh", "zh-rCN", "zh-rTW", "ja")
     }
 
-    signingConfigs {
-        create("release") {
-            storeFile = file("release.keystore")
-            storePassword = System.getenv("KEYSTORE_PASSWORD")
-                ?: throw GradleException("KEYSTORE_PASSWORD env var not set")
-            keyAlias = System.getenv("KEY_ALIAS")
-                ?: throw GradleException("KEY_ALIAS env var not set")
-            keyPassword = System.getenv("KEY_PASSWORD")
-                ?: throw GradleException("KEY_PASSWORD env var not set")
+    val keystorePassword = System.getenv("KEYSTORE_PASSWORD")
+    val keyAliasEnv = System.getenv("KEY_ALIAS")
+    val keyPasswordEnv = System.getenv("KEY_PASSWORD")
+    val hasSigningConfig = keystorePassword != null && keyAliasEnv != null && keyPasswordEnv != null
+
+    if (hasSigningConfig) {
+        signingConfigs {
+            create("release") {
+                storeFile = file("release.keystore")
+                storePassword = keystorePassword
+                keyAlias = keyAliasEnv
+                keyPassword = keyPasswordEnv
+            }
         }
     }
 
@@ -42,7 +46,9 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            if (hasSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

@@ -179,4 +179,21 @@
         <item quantity="one">%d contact</item>
         <item quantity="other">%d contacts</item>
     </plurals>
+
+    <!-- Interaction log -->
+    <string name="delete_interaction_title">Delete this interaction?</string>
+    <string-array name="interaction_types">
+        <item>Note</item>
+        <item>Call</item>
+        <item>Meeting</item>
+        <item>Email</item>
+    </string-array>
+
+    <!-- MergeDuplicatesActivity -->
+    <string name="btn_merge">Merge</string>
+    <string name="contacts_merged">Contacts merged</string>
+    <string name="merge_field_empty">(empty)</string>
+
+    <!-- About dialog -->
+    <string name="about_view_source">View Source</string>
 </resources>

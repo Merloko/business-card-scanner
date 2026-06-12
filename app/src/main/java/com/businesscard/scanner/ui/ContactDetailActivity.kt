@@ -161,11 +161,11 @@ class ContactDetailActivity : AppCompatActivity() {
         // startActivity is guarded against ActivityNotFoundException on devices without a handler.
         binding.textPhone.setOnClickListener {
             safeLaunch(Intent(Intent.ACTION_DIAL,
-                Uri.parse("tel:${VCardUtils.dialable(card.phone.lines().firstOrNull().orEmpty())}")))
+                Uri.parse("tel:${VCardUtils.dialable(card.phone.lines().firstOrNull { it.isNotBlank() }.orEmpty())}")))
         }
         binding.textMobile.setOnClickListener {
             safeLaunch(Intent(Intent.ACTION_DIAL,
-                Uri.parse("tel:${VCardUtils.dialable(card.mobile.lines().firstOrNull().orEmpty())}")))
+                Uri.parse("tel:${VCardUtils.dialable(card.mobile.lines().firstOrNull { it.isNotBlank() }.orEmpty())}")))
         }
         binding.textEmail.setOnClickListener {
             safeLaunch(Intent(Intent.ACTION_SENDTO,

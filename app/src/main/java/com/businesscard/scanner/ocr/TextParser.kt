@@ -112,6 +112,8 @@ object TextParser {
         return Pair(landlines.joinToString("\n"), mobiles.joinToString("\n"))
     }
 
+    private val DIGIT_RUN_PATTERN = Regex(""".*\d{3,}.*""")
+    private val WHITESPACE = Regex("\\s+")
     private val ABN_PATTERN = Regex("""(?i)ABN\s*:?\s*\d[\d\s]{8,13}""")
     private val ACN_PATTERN = Regex("""(?i)ACN\s*:?\s*\d[\d\s]{6,10}""")
     private val BSB_PATTERN = Regex("""(?i)BSB\s*:?\s*\d[\d\s-]{5,9}""")
@@ -195,7 +197,7 @@ object TextParser {
 
         val candidates = lines.filter { line ->
             skipLines.none { line.contains(it, ignoreCase = true) } &&
-            !line.matches(Regex(""".*\d{3,}.*""")) &&
+            !line.matches(DIGIT_RUN_PATTERN) &&
             line.length in 2..60
         }
 
@@ -227,7 +229,7 @@ object TextParser {
         val cjkCount = trimmed.count { CjkUtils.isCjk(it) }
         if (cjkCount in 2..6 && trimmed.all { it == ' ' || CjkUtils.isCjk(it) }) return true
         // Latin/mixed names: 1–4 capitalised words
-        val words = trimmed.split(Regex("\\s+"))
+        val words = trimmed.split(WHITESPACE)
         if (words.size !in 1..4) return false
         return words.all { word ->
             // Strip trailing punctuation (e.g. "ANDRICH," → "ANDRICH")

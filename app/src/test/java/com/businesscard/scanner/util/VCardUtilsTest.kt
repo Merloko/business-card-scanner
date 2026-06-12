@@ -125,4 +125,12 @@ class VCardUtilsTest {
         val vcard = VCardUtils.buildVCardText(card(name = "张三丰"))
         assertTrue(vcard.contains("N:张三丰;;"))
     }
+
+    @Test fun `newline in notes normalised to space on export`() {
+        // vcfEscape converts \n → space; documents the intentional asymmetry with
+        // VCardParser which expands \n escapes to real newlines on import
+        val vcard = VCardUtils.buildVCardText(card(notes = "line one\nline two"))
+        val noteLine = vcard.lines().first { it.startsWith("NOTE:") }
+        assertEquals("NOTE:line one line two", noteLine)
+    }
 }

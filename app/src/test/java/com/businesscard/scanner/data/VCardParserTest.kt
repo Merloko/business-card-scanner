@@ -311,4 +311,23 @@ class VCardParserTest {
         assertEquals("Acme Corp", cards[0].companyName)
         assertEquals("No special chars", cards[0].notes)
     }
+
+    @Test fun `trailing backslash at end of field value is preserved`() {
+        // unescapeVcf guard (i + 1 < s.length) falls through to else, keeping the backslash
+        val vcard = "BEGIN:VCARD\nVERSION:3.0\nFN:trail\\\nEMAIL:t@example.com\nEND:VCARD"
+        val cards = VCardParser.parse(vcard)
+        assertEquals("trail\\", cards[0].personName)
+    }
+
+    @Test fun `backslash-n escape in NOTE expands to newline char`() {
+        val cards = VCardParser.parse("""
+            BEGIN:VCARD
+            VERSION:3.0
+            FN:Jane Doe
+            NOTE:line one\nline two
+            EMAIL:jane@example.com
+            END:VCARD
+        """.trimIndent())
+        assertEquals("line one\nline two", cards[0].notes)
+    }
 }

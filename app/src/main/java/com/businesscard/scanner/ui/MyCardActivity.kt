@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.nfc.NdefMessage
+import android.os.Build
 import android.nfc.NdefRecord
 import android.nfc.NfcAdapter
 import android.nfc.Tag
@@ -22,6 +23,7 @@ import androidx.lifecycle.lifecycleScope
 import com.businesscard.scanner.R
 import com.businesscard.scanner.databinding.ActivityMyCardBinding
 import com.businesscard.scanner.ocr.CjkUtils
+import com.businesscard.scanner.util.VCardUtils
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -37,7 +39,7 @@ class MyCardActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("my_card", MODE_PRIVATE) }
 
     private var nfcAdapter: NfcAdapter? = null
-    private var nfcWritePending = false
+    @Volatile private var nfcWritePending = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,7 +80,12 @@ class MyCardActivity : AppCompatActivity() {
         if (action != NfcAdapter.ACTION_TAG_DISCOVERED &&
             action != NfcAdapter.ACTION_NDEF_DISCOVERED &&
             action != NfcAdapter.ACTION_TECH_DISCOVERED) return
-        val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG) ?: return
+        val tag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+        } ?: return
         writeVCardToTag(tag)
     }
 
@@ -126,12 +133,11 @@ class MyCardActivity : AppCompatActivity() {
                     formatable.format(message)
                     formatable.close()
                 }
-                nfcWritePending = false
                 withContext(Dispatchers.Main) {
+                    nfcWritePending = false
                     Toast.makeText(this@MyCardActivity, getString(R.string.nfc_write_success), Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                nfcWritePending = false
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@MyCardActivity, getString(R.string.nfc_write_failed, e.message), Toast.LENGTH_SHORT).show()
                 }
@@ -195,8 +201,6 @@ class MyCardActivity : AppCompatActivity() {
             .apply()
     }
 
-    private fun vcfEscape(s: String) = s.replace("\r", "").replace("\n", " ")
-
     private fun buildVCard(): String = buildString {
         val name = binding.editName.text.toString().trim()
         val company = binding.editCompany.text.toString().trim()
@@ -207,20 +211,20 @@ class MyCardActivity : AppCompatActivity() {
         val website = binding.editWebsite.text.toString().trim()
         appendLine("BEGIN:VCARD")
         appendLine("VERSION:3.0")
-        appendLine("FN:${vcfEscape(name)}")
+        appendLine("FN:${VCardUtils.vcfEscape(name)}")
         val parts = name.trim().split(Regex("\\s+"))
         val (lastName, firstName) = when {
             CjkUtils.containsCjk(name) -> Pair(name, "")
             parts.size >= 2 -> Pair(parts.last(), parts.dropLast(1).joinToString(" "))
             else -> Pair("", name)
         }
-        appendLine("N:${vcfEscape(lastName)};${vcfEscape(firstName)};;;")
-        if (company.isNotBlank()) appendLine("ORG:${vcfEscape(company)}")
-        if (title.isNotBlank()) appendLine("TITLE:${vcfEscape(title)}")
-        if (phone.isNotBlank()) appendLine("TEL;TYPE=WORK:${vcfEscape(phone)}")
-        if (mobile.isNotBlank()) appendLine("TEL;TYPE=CELL:${vcfEscape(mobile)}")
-        if (email.isNotBlank()) appendLine("EMAIL:${vcfEscape(email)}")
-        if (website.isNotBlank()) appendLine("URL:${vcfEscape(website)}")
+        appendLine("N:${VCardUtils.vcfEscape(lastName)};${VCardUtils.vcfEscape(firstName)};;;")
+        if (company.isNotBlank()) appendLine("ORG:${VCardUtils.vcfEscape(company)}")
+        if (title.isNotBlank()) appendLine("TITLE:${VCardUtils.vcfEscape(title)}")
+        if (phone.isNotBlank()) appendLine("TEL;TYPE=WORK:${VCardUtils.vcfEscape(phone)}")
+        if (mobile.isNotBlank()) appendLine("TEL;TYPE=CELL:${VCardUtils.vcfEscape(mobile)}")
+        if (email.isNotBlank()) appendLine("EMAIL:${VCardUtils.vcfEscape(email)}")
+        if (website.isNotBlank()) appendLine("URL:${VCardUtils.vcfEscape(website)}")
         append("END:VCARD")
     }
 

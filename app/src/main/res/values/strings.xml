@@ -22,6 +22,8 @@
     <string name="camera_permission_denied">Camera permission is required to scan business cards</string>
     <string name="front_image">Front of Card</string>
     <string name="back_image">Back of Card</string>
+    <string name="front_image_tap">Front of card — tap to view full screen</string>
+    <string name="back_image_tap">Back of card — tap to view full screen</string>
     <string name="raw_ocr_text">Raw OCR Text</string>
     <string name="delete_contact">Delete Contact</string>
     <string name="delete_confirm">Are you sure you want to delete this contact?</string>
@@ -177,4 +179,21 @@
         <item quantity="one">%d contact</item>
         <item quantity="other">%d contacts</item>
     </plurals>
+
+    <!-- Interaction log -->
+    <string name="delete_interaction_title">Delete this interaction?</string>
+    <string-array name="interaction_types">
+        <item>Note</item>
+        <item>Call</item>
+        <item>Meeting</item>
+        <item>Email</item>
+    </string-array>
+
+    <!-- MergeDuplicatesActivity -->
+    <string name="btn_merge">Merge</string>
+    <string name="contacts_merged">Contacts merged</string>
+    <string name="merge_field_empty">(empty)</string>
+
+    <!-- About dialog -->
+    <string name="about_view_source">View Source</string>
 </resources>

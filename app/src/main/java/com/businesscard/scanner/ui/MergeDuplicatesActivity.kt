@@ -30,7 +30,7 @@ class MergeDuplicatesActivity : AppCompatActivity() {
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "Find Duplicates"
+        supportActionBar?.title = getString(R.string.find_duplicates)
 
         binding.recyclerDuplicates.layoutManager = LinearLayoutManager(this)
         loadDuplicates()
@@ -114,9 +114,9 @@ class MergeDuplicatesActivity : AppCompatActivity() {
             fieldView.findViewById<TextView>(R.id.fieldLabel).text = field.label
             val radioGroup = fieldView.findViewById<android.widget.RadioGroup>(R.id.radioGroup)
             fieldView.findViewById<android.widget.RadioButton>(R.id.radioA).text =
-                field.fromA.ifBlank { "(empty)" }.take(60)
+                field.fromA.ifBlank { getString(R.string.merge_field_empty) }.take(60)
             fieldView.findViewById<android.widget.RadioButton>(R.id.radioB).text =
-                field.fromB.ifBlank { "(empty)" }.take(60)
+                field.fromB.ifBlank { getString(R.string.merge_field_empty) }.take(60)
             radioGroup.check(R.id.radioA)
             radioGroup.setOnCheckedChangeListener { _, checkedId ->
                 choiceMap[field.label] = if (checkedId == R.id.radioA) 0 else 1
@@ -125,9 +125,9 @@ class MergeDuplicatesActivity : AppCompatActivity() {
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Merge Contacts")
+            .setTitle(R.string.merge_contacts)
             .setView(scrollView)
-            .setPositiveButton("Merge") { _, _ ->
+            .setPositiveButton(R.string.btn_merge) { _, _ ->
                 fun pick(label: String, valA: String, valB: String) =
                     if ((choiceMap[label] ?: 0) == 1) valB else valA
 
@@ -146,12 +146,12 @@ class MergeDuplicatesActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     viewModel.mergeNow(merged, b)
                     android.widget.Toast.makeText(
-                        this@MergeDuplicatesActivity, "Contacts merged", android.widget.Toast.LENGTH_SHORT
+                        this@MergeDuplicatesActivity, getString(R.string.contacts_merged), android.widget.Toast.LENGTH_SHORT
                     ).show()
                     loadDuplicates()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -173,10 +173,11 @@ private class DuplicatePairAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val (a, b) = pairs[position]
-        holder.binding.nameA.text = a.personName.ifBlank { "Unknown" }
+        val ctx = holder.itemView.context
+        holder.binding.nameA.text = a.personName.ifBlank { ctx.getString(R.string.fallback_unknown_name) }
         holder.binding.companyA.text = a.companyName
         holder.binding.emailA.text = a.email
-        holder.binding.nameB.text = b.personName.ifBlank { "Unknown" }
+        holder.binding.nameB.text = b.personName.ifBlank { ctx.getString(R.string.fallback_unknown_name) }
         holder.binding.companyB.text = b.companyName
         holder.binding.emailB.text = b.email
         holder.binding.btnMerge.setOnClickListener { onMerge(a, b) }

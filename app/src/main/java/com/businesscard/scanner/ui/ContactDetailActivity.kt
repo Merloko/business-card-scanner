@@ -41,6 +41,7 @@ import com.businesscard.scanner.R
 import com.businesscard.scanner.data.BusinessCard
 import com.businesscard.scanner.data.InteractionLog
 import com.businesscard.scanner.databinding.ActivityContactDetailBinding
+import com.businesscard.scanner.ocr.TextParser
 import com.businesscard.scanner.util.VCardUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -193,8 +194,19 @@ class ContactDetailActivity : AppCompatActivity() {
                 if (card.rawTextBack.isNotBlank()) append("--- Back ---\n${card.rawTextBack}")
             }
             binding.rawOcrSection.visibility = View.VISIBLE
+
+            binding.textParseDebug.text = TextParser.debugParse(card.rawTextFront, card.rawTextBack)
+            binding.parseDebugSection.visibility = View.VISIBLE
+            binding.btnToggleParseDebug.setOnClickListener {
+                val expanded = binding.textParseDebug.visibility == View.VISIBLE
+                binding.textParseDebug.visibility = if (expanded) View.GONE else View.VISIBLE
+                binding.btnToggleParseDebug.text = getString(
+                    if (expanded) R.string.parser_debug_show else R.string.parser_debug_hide
+                )
+            }
         } else {
             binding.rawOcrSection.visibility = View.GONE
+            binding.parseDebugSection.visibility = View.GONE
         }
     }
 

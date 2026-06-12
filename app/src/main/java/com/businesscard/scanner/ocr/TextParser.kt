@@ -52,6 +52,53 @@ object TextParser {
         "株式会社", "有限会社", "合同会社", "合資会社"
     )
 
+    /** Returns a human-readable breakdown of how each piece of the raw OCR text was classified. */
+    fun debugParse(frontText: String, backText: String = ""): String {
+        val allText = "$frontText\n$backText"
+        val lines = allText.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val sb = StringBuilder()
+
+        sb.appendLine("Lines (${lines.size}):")
+        lines.forEachIndexed { i, line -> sb.appendLine("  [$i] $line") }
+        sb.appendLine()
+
+        val email = extractEmail(allText)
+        sb.appendLine("Email: ${email.ifBlank { "(none)" }}")
+
+        val (phone, mobile) = extractPhones(allText)
+        sb.appendLine("Phone: ${phone.ifBlank { "(none)" }}")
+        sb.appendLine("Mobile: ${mobile.ifBlank { "(none)" }}")
+
+        val website = extractWebsite(allText, email)
+        sb.appendLine("Website: ${website.ifBlank { "(none)" }}")
+
+        val address = extractAddress(lines)
+        sb.appendLine("Address: ${address.ifBlank { "(none)" }}")
+
+        val jobTitle = extractJobTitle(lines)
+        sb.appendLine("Job title: ${jobTitle.ifBlank { "(none)" }}")
+
+        val allPhones = (phone.lines() + mobile.lines()).filter { it.isNotBlank() }
+        val (personName, companyName) = extractNameAndCompany(lines, email, allPhones, website, jobTitle, address)
+        sb.appendLine("Name: ${personName.ifBlank { "(none)" }}")
+        sb.appendLine("Company: ${companyName.ifBlank { "(none)" }}")
+        sb.appendLine()
+
+        val skipLines = (setOf(email, website, jobTitle, address) + allPhones).filter { it.isNotBlank() }
+        val candidates = lines.filter { line ->
+            skipLines.none { line.contains(it, ignoreCase = true) } &&
+            !line.matches(DIGIT_RUN_PATTERN) &&
+            line.length in 2..60
+        }
+        sb.appendLine("Name/company candidates (${candidates.size}):")
+        if (candidates.isEmpty()) sb.appendLine("  (all lines were skipped)")
+        candidates.forEach { sb.appendLine("  • $it") }
+        sb.appendLine()
+        sb.append("Skipped because matched phone/email/etc (${skipLines.size}): ${skipLines.joinToString(", ").ifBlank { "(none)" }}")
+
+        return sb.toString()
+    }
+
     fun parse(frontText: String, backText: String = ""): ParsedContact {
         val allText = "$frontText\n$backText"
         val lines = allText.lines().map { it.trim() }.filter { it.isNotBlank() }

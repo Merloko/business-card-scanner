@@ -126,7 +126,7 @@
             android:layout_gravity="center_vertical"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_delete"
-            android:contentDescription="Delete"
+            android:contentDescription="@string/delete"
             android:padding="8dp"
             android:minWidth="48dp"
             android:minHeight="48dp" />

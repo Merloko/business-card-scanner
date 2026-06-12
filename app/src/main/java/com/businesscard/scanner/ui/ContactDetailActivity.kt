@@ -41,13 +41,12 @@ import com.businesscard.scanner.R
 import com.businesscard.scanner.data.BusinessCard
 import com.businesscard.scanner.data.InteractionLog
 import com.businesscard.scanner.databinding.ActivityContactDetailBinding
-import com.businesscard.scanner.ocr.CjkUtils
+import com.businesscard.scanner.util.VCardUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.ArrayList
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -162,11 +161,11 @@ class ContactDetailActivity : AppCompatActivity() {
         // startActivity is guarded against ActivityNotFoundException on devices without a handler.
         binding.textPhone.setOnClickListener {
             safeLaunch(Intent(Intent.ACTION_DIAL,
-                Uri.parse("tel:${dialable(card.phone.lines().firstOrNull().orEmpty())}")))
+                Uri.parse("tel:${VCardUtils.dialable(card.phone.lines().firstOrNull().orEmpty())}")))
         }
         binding.textMobile.setOnClickListener {
             safeLaunch(Intent(Intent.ACTION_DIAL,
-                Uri.parse("tel:${dialable(card.mobile.lines().firstOrNull().orEmpty())}")))
+                Uri.parse("tel:${VCardUtils.dialable(card.mobile.lines().firstOrNull().orEmpty())}")))
         }
         binding.textEmail.setOnClickListener {
             safeLaunch(Intent(Intent.ACTION_SENDTO,
@@ -225,7 +224,7 @@ class ContactDetailActivity : AppCompatActivity() {
                     setPadding(0, pad, 0, pad)
                     setOnLongClickListener {
                         AlertDialog.Builder(this@ContactDetailActivity)
-                            .setTitle("Delete this interaction?")
+                            .setTitle(R.string.delete_interaction_title)
                             .setPositiveButton(R.string.delete) { _, _ -> viewModel.deleteLog(log) }
                             .setNegativeButton(R.string.cancel, null)
                             .show()
@@ -239,7 +238,7 @@ class ContactDetailActivity : AppCompatActivity() {
 
     private fun showAddInteractionDialog() {
         val cardId = card?.id ?: return
-        val types = arrayOf("Note", "Call", "Meeting", "Email")
+        val types = resources.getStringArray(R.array.interaction_types)
         var selectedType = types[0]
 
         val density = resources.displayMetrics.density
@@ -288,15 +287,6 @@ class ContactDetailActivity : AppCompatActivity() {
         )
     }
 
-    private fun dialable(number: String): String {
-        val sb = StringBuilder()
-        for (c in number) {
-            if (c.isDigit()) sb.append(c)
-            else if (c == '+' && sb.isEmpty()) sb.append(c)
-        }
-        return sb.toString()
-    }
-
     private fun setField(row: View, textView: TextView, value: String) {
         if (value.isNotBlank()) {
             textView.text = value
@@ -313,11 +303,11 @@ class ContactDetailActivity : AppCompatActivity() {
             putExtra(ContactsContract.Intents.Insert.COMPANY, card.companyName)
             putExtra(ContactsContract.Intents.Insert.JOB_TITLE, card.jobTitle)
             if (card.phone.isNotBlank()) {
-                putExtra(ContactsContract.Intents.Insert.PHONE, card.phone.lines().first())
+                putExtra(ContactsContract.Intents.Insert.PHONE, card.phone.lines().firstOrNull { it.isNotBlank() }.orEmpty())
                 putExtra(ContactsContract.Intents.Insert.PHONE_TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_WORK)
             }
             if (card.mobile.isNotBlank()) {
-                putExtra(ContactsContract.Intents.Insert.SECONDARY_PHONE, card.mobile.lines().first())
+                putExtra(ContactsContract.Intents.Insert.SECONDARY_PHONE, card.mobile.lines().firstOrNull { it.isNotBlank() }.orEmpty())
                 putExtra(ContactsContract.Intents.Insert.SECONDARY_PHONE_TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
             }
             if (card.email.isNotBlank()) {
@@ -447,30 +437,7 @@ class ContactDetailActivity : AppCompatActivity() {
             .show()
     }
 
-    // Strips control characters from vCard property values to prevent newline injection.
-    private fun vcfEscape(s: String) = s.replace("\r", "").replace("\n", " ")
-
-    private fun buildVCardText(card: BusinessCard) = buildString {
-        appendLine("BEGIN:VCARD")
-        appendLine("VERSION:3.0")
-        appendLine("FN:${vcfEscape(card.personName)}")
-        val nameParts = card.personName.trim().split(Regex("\\s+"))
-        val (lastName, firstName) = when {
-            CjkUtils.containsCjk(card.personName) -> Pair(card.personName, "")
-            nameParts.size >= 2 -> Pair(nameParts.last(), nameParts.dropLast(1).joinToString(" "))
-            else -> Pair("", card.personName)
-        }
-        appendLine("N:${vcfEscape(lastName)};${vcfEscape(firstName)};;;")
-        if (card.companyName.isNotBlank()) appendLine("ORG:${vcfEscape(card.companyName)}")
-        if (card.jobTitle.isNotBlank()) appendLine("TITLE:${vcfEscape(card.jobTitle)}")
-        for (line in card.phone.lines()) if (line.isNotBlank()) appendLine("TEL;TYPE=WORK:${vcfEscape(line.trim())}")
-        for (line in card.mobile.lines()) if (line.isNotBlank()) appendLine("TEL;TYPE=CELL:${vcfEscape(line.trim())}")
-        if (card.email.isNotBlank()) appendLine("EMAIL:${vcfEscape(card.email)}")
-        if (card.website.isNotBlank()) appendLine("URL:${vcfEscape(card.website)}")
-        if (card.address.isNotBlank()) appendLine("ADR;TYPE=WORK:;;${vcfEscape(card.address)};;;;")
-        if (card.notes.isNotBlank()) appendLine("NOTE:${vcfEscape(card.notes)}")
-        appendLine("END:VCARD")
-    }
+    private fun buildVCardText(card: BusinessCard) = VCardUtils.buildVCardText(card)
 
     private fun checkAndOpenMeetingRecorder() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -516,7 +483,7 @@ class ContactDetailActivity : AppCompatActivity() {
             putExtra(ReminderReceiver.EXTRA_CARD_ID, card.id)
         }
         val pending = PendingIntent.getBroadcast(
-            this, card.id.toInt(), intent,
+            this, (card.id and 0x7FFFFFFF).toInt(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val alarmManager = getSystemService(AlarmManager::class.java)

@@ -36,6 +36,10 @@ import java.io.File
 class MyCardActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMyCardBinding
+
+    companion object {
+        private val WHITESPACE = Regex("\\s+")
+    }
     private val prefs by lazy { getSharedPreferences("my_card", MODE_PRIVATE) }
 
     private var nfcAdapter: NfcAdapter? = null
@@ -219,7 +223,7 @@ class MyCardActivity : AppCompatActivity() {
         appendLine("BEGIN:VCARD")
         appendLine("VERSION:3.0")
         appendLine("FN:${VCardUtils.vcfEscape(name)}")
-        val parts = name.trim().split(Regex("\\s+"))
+        val parts = name.trim().split(WHITESPACE)
         val (lastName, firstName) = when {
             CjkUtils.containsCjk(name) -> Pair(name, "")
             parts.size >= 2 -> Pair(parts.last(), parts.dropLast(1).joinToString(" "))

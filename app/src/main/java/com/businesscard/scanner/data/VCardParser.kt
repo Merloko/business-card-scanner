@@ -2,10 +2,13 @@ package com.businesscard.scanner.data
 
 object VCardParser {
 
+    private val LINE_FOLD = Regex("\n[ \t]")
+    private val VCARD_BLOCK = Regex("(?i)BEGIN:VCARD.*?END:VCARD", RegexOption.DOT_MATCHES_ALL)
+
     fun parse(content: String): List<BusinessCard> {
         val normalized = content.replace("\r\n", "\n").replace("\r", "\n")
-        val unfolded = normalized.replace(Regex("\n[ \t]"), "")
-        return Regex("(?i)BEGIN:VCARD.*?END:VCARD", RegexOption.DOT_MATCHES_ALL)
+        val unfolded = normalized.replace(LINE_FOLD, "")
+        return VCARD_BLOCK
             .findAll(unfolded)
             .map { parseOne(it.value) }
             .filter { it.personName.isNotBlank() || it.email.isNotBlank() }

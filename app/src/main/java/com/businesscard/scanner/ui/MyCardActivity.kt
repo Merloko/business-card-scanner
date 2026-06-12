@@ -133,8 +133,8 @@ class MyCardActivity : AppCompatActivity() {
                     formatable.format(message)
                     formatable.close()
                 }
-                nfcWritePending = false
                 withContext(Dispatchers.Main) {
+                    nfcWritePending = false
                     Toast.makeText(this@MyCardActivity, getString(R.string.nfc_write_success), Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {

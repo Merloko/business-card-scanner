@@ -87,7 +87,7 @@ object VCardParser {
         while (i < value.length) {
             when {
                 value[i] == '\\' && i + 1 < value.length -> {
-                    sb.append(unescapeChar(value[i + 1])); i += 2
+                    sb.append(unescapeSeq(value[i + 1])); i += 2
                 }
                 value[i] == ';' -> { parts.add(sb.toString()); sb.clear(); i++ }
                 else -> { sb.append(value[i]); i++ }
@@ -106,7 +106,7 @@ object VCardParser {
         var i = 0
         while (i < s.length) {
             if (s[i] == '\\' && i + 1 < s.length) {
-                sb.append(unescapeChar(s[i + 1])); i += 2
+                sb.append(unescapeSeq(s[i + 1])); i += 2
             } else {
                 sb.append(s[i]); i++
             }
@@ -114,11 +114,13 @@ object VCardParser {
         return sb.toString()
     }
 
-    private fun unescapeChar(c: Char) = when (c) {
-        '\\' -> '\\'
-        ';'  -> ';'
-        ','  -> ','
-        'n', 'N' -> '\n'
-        else -> c
+    // Returns the unescaped string for a vCard escape sequence: \X → result.
+    // Unknown sequences preserve both characters per RFC 6350 §3.4.
+    private fun unescapeSeq(c: Char): String = when (c) {
+        '\\' -> "\\"
+        ';'  -> ";"
+        ','  -> ","
+        'n', 'N' -> "\n"
+        else -> "\\$c"
     }
 }

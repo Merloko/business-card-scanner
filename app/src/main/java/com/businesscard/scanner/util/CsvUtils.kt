@@ -69,7 +69,10 @@ object CsvUtils {
                 card.phone.lines().firstOrNull().orEmpty(),
                 card.mobile.lines().firstOrNull().orEmpty(),
                 card.email, card.website, card.address,
-                card.notes, card.tags
+                // Collapse newlines so each contact stays on a single CSV row.
+                // parseCsvLine has no multi-line quoted-field awareness.
+                card.notes.replace('\n', ' ').replace('\r', ' '),
+                card.tags.replace('\n', ' ').replace('\r', ' ')
             )
         }
         return buildString {

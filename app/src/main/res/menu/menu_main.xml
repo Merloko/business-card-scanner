@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_my_card"
+        android:title="@string/action_my_card"
+        android:icon="@drawable/ic_card_id"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/action_sort"
+        android:title="Sort"
+        android:icon="@drawable/ic_sort"
+        app:showAsAction="always">
+        <menu>
+            <item android:id="@+id/sort_name"    android:title="Name (A→Z)"    android:checkable="true" />
+            <item android:id="@+id/sort_company" android:title="Company (A→Z)" android:checkable="true" />
+            <item android:id="@+id/sort_newest"  android:title="Date — Newest" android:checkable="true" />
+            <item android:id="@+id/sort_oldest"  android:title="Date — Oldest" android:checkable="true" />
+        </menu>
+    </item>
+    <item
+        android:id="@+id/action_import_vcard"
+        android:title="@string/action_import_vcard"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_import_csv"
+        android:title="@string/action_import_csv"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_export"
+        android:title="Export CSV"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_backup"
+        android:title="Backup (JSON)"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_restore"
+        android:title="Restore from Backup"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_merge_duplicates"
+        android:title="Find Duplicates"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_settings"
+        android:title="Settings"
+        app:showAsAction="never">
+        <menu>
+            <item
+                android:id="@+id/action_theme"
+                android:title="@string/action_theme"
+                app:showAsAction="never">
+                <menu>
+                    <item android:id="@+id/theme_system" android:title="@string/theme_system" android:checkable="true" />
+                    <item android:id="@+id/theme_light"  android:title="@string/theme_light"  android:checkable="true" />
+                    <item android:id="@+id/theme_dark"   android:title="@string/theme_dark"   android:checkable="true" />
+                </menu>
+            </item>
+            <item
+                android:id="@+id/action_about"
+                android:title="About"
+                app:showAsAction="never" />
+        </menu>
+    </item>
+</menu>

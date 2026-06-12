@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Business Card Scanner</string>
+    <string name="scan_card">Scan Business Card</string>
+    <string name="no_cards">No business cards yet.\nTap + to scan your first card!</string>
+    <string name="search_hint">Search by name or company…</string>
+    <string name="scan_front_title">Scan Front</string>
+    <string name="scan_back_title">Scan Back</string>
+    <string name="scan_front_instruction">Position the FRONT of the business card in the frame</string>
+    <string name="scan_back_instruction">Now position the BACK of the business card</string>
+    <string name="front_scanned">Front scanned! Tap \'Scan Back\' or \'Save Contact\'.</string>
+    <string name="back_scanned">Back scanned! Tap \'Save Contact\' to save.</string>
+    <string name="ocr_no_text">No text detected — try better lighting or a clearer image.</string>
+    <string name="flip_card">Flip the card over and capture the back</string>
+    <string name="capture">Capture</string>
+    <string name="from_gallery">Gallery</string>
+    <string name="photoscan_tip">Tip: Use Google PhotoScan for glare-free card photos</string>
+    <string name="open_photoscan">Open PhotoScan</string>
+    <string name="scan_back">Scan Back</string>
+    <string name="save_contact">Save Contact</string>
+    <string name="contact_saved">Contact saved!</string>
+    <string name="camera_permission_denied">Camera permission is required to scan business cards</string>
+    <string name="front_image">Front of Card</string>
+    <string name="back_image">Back of Card</string>
+    <string name="front_image_tap">Front of card — tap to view full screen</string>
+    <string name="back_image_tap">Back of card — tap to view full screen</string>
+    <string name="raw_ocr_text">Raw OCR Text</string>
+    <string name="delete_contact">Delete Contact</string>
+    <string name="delete_confirm">Are you sure you want to delete this contact?</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="widget_description">Shows your contact count with quick scan and view buttons</string>
+    <string name="hint_name">Name</string>
+    <string name="hint_company">Company</string>
+    <string name="hint_job_title">Job Title</string>
+    <string name="hint_phone">Phone (Landline)</string>
+    <string name="hint_mobile">Mobile</string>
+    <string name="hint_email">Email</string>
+    <string name="hint_website">Website</string>
+    <string name="hint_address">Address</string>
+    <string name="hint_notes">Notes</string>
+    <string name="label_tags">Tags</string>
+    <string name="chip_add_tag">Add tag</string>
+    <string name="btn_rescan">Rescan from Images</string>
+    <string name="btn_save_changes">Save Changes</string>
+    <string name="no_duplicates_found">No duplicates found</string>
+    <string name="btn_review_merge">Review &amp; Merge</string>
+    <string name="widget_btn_scan_desc">Scan new business card</string>
+    <string name="widget_btn_open_label">View All</string>
+    <string name="widget_btn_open_desc">View all contacts</string>
+    <string name="widget_count_default">0 contacts</string>
+    <string name="card_image_desc">Card image</string>
+    <string name="contact_details">Contact Details</string>
+    <string name="edit_contact">Edit Contact</string>
+    <string name="find_duplicates">Find Duplicates</string>
+    <string name="merge_contacts">Merge Contacts</string>
+    <string name="undo">Undo</string>
+    <string name="close">Close</string>
+    <string name="share">Share</string>
+    <string name="fallback_unknown_name">Unknown</string>
+    <string name="fallback_no_company">No company</string>
+    <string name="label_interactions">Interactions</string>
+    <string name="btn_add_interaction">+ Add</string>
+    <string name="no_interactions">No interactions logged yet.</string>
+    <string name="log_interaction_title">Log Interaction</string>
+    <string name="action_linkedin">Search LinkedIn</string>
+    <string name="action_my_card">My Digital Card</string>
+    <string name="action_import_vcard">Import vCard (.vcf)</string>
+    <string name="action_import_csv">Import CSV</string>
+    <string name="import_csv_success">Imported %d contact(s) from CSV</string>
+    <string name="import_csv_none">No new contacts found in CSV</string>
+    <string name="import_csv_failed">CSV import failed: %s</string>
+    <string name="import_csv_no_columns">CSV has no recognised column headers</string>
+    <string name="my_card_title">My Digital Card</string>
+    <string name="my_card_saved">Card saved</string>
+    <string name="my_card_show_qr">Show QR Code</string>
+    <string name="my_card_name_required">Please enter your name first</string>
+    <string name="my_card_qr_desc">QR code for my digital card</string>
+    <string name="my_card_share_chooser">Share my card via…</string>
+    <string name="qr_generate_failed">Could not generate QR code</string>
+    <string name="import_vcard_success">Imported %d contact(s)</string>
+    <string name="import_vcard_none">No new contacts found in file</string>
+    <string name="import_vcard_failed">Import failed: %s</string>
+
+    <!-- Image viewer -->
+    <string name="image_front_label">Front</string>
+    <string name="image_back_label">Back</string>
+
+    <!-- No-handler guard (ActivityNotFoundException) -->
+    <string name="no_app_for_action">No app found to handle this action</string>
+    <string name="no_app_for_share">No app available to share</string>
+
+    <!-- ScanActivity errors and dialogs -->
+    <string name="capture_failed">Capture failed: %s</string>
+    <string name="image_load_error">Could not load image: %s</string>
+    <string name="possible_duplicate_title">Possible Duplicate</string>
+    <string name="possible_duplicate_message">Possible duplicate: \'%1$s\' already exists. Save anyway?</string>
+    <string name="save_anyway">Save Anyway</string>
+    <string name="share_contact_via">Share contact via…</string>
+
+    <!-- ContactDetailActivity -->
+    <string name="no_name_to_search">No name or company to search</string>
+    <string name="interaction_note_hint">Optional note…</string>
+
+    <!-- EditContactActivity -->
+    <string name="add_tag_title">Add Tag</string>
+    <string name="add">Add</string>
+    <string name="tag_name_hint">Tag name</string>
+    <string name="rescan_success">Rescanned — review and save</string>
+    <string name="rescan_no_images">Could not read images — they may have been deleted</string>
+    <string name="saved">Saved</string>
+
+    <!-- MainActivity -->
+    <string name="n_selected">%d selected</string>
+    <string name="contact_deleted">%s deleted</string>
+    <string name="no_contacts_to_export">No contacts to export</string>
+    <string name="no_contacts_to_backup">No contacts to back up</string>
+    <string name="export_via_chooser">Export contacts via…</string>
+    <string name="backup_via_chooser">Save backup via…</string>
+    <string name="restored_contacts">Restored %d contacts</string>
+    <string name="restore_failed">Restore failed: %s</string>
+    <string name="nothing_selected">Nothing selected</string>
+    <string name="batch_delete_title">Delete %d contacts?</string>
+    <string name="batch_delete_message">This cannot be undone.</string>
+
+    <string name="badge_duplicate">Duplicate?</string>
+    <string name="badge_rescan">Rescan</string>
+    <string name="action_theme">Theme</string>
+    <string name="theme_system">Follow system</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+
+    <!-- NFC (My Card) -->
+    <string name="btn_nfc_share">Write to NFC Tag</string>
+    <string name="btn_save_to_contacts">Save to Phone Contacts</string>
+    <string name="nfc_unavailable">NFC is not available or not enabled on this device</string>
+    <string name="nfc_hold_to_tag">Hold your phone to an NFC tag to write your card…</string>
+    <string name="nfc_write_success">Card written to NFC tag</string>
+    <string name="nfc_write_failed">NFC write failed: %s</string>
+
+    <!-- Event mode (ScanActivity) -->
+    <string name="action_event_mode">Set Event Tag</string>
+    <string name="event_mode_title">Event Mode</string>
+    <string name="event_name_hint">Event name (applied as tag to each card)</string>
+    <string name="set">Set</string>
+    <string name="clear">Clear</string>
+    <string name="event_active_subtitle">Event: %s</string>
+
+    <!-- Follow-up reminder -->
+    <string name="action_set_reminder">Set Reminder</string>
+    <string name="reminder_set">Reminder set</string>
+    <string name="reminder_set_inexact">Reminder set (approximate time — grant exact alarm permission in Settings for precise timing)</string>
+    <string name="reminder_title">Follow-up Reminder</string>
+    <string name="reminder_text">Time to follow up with %s</string>
+    <string name="notification_permission_needed">Enable notifications in Settings to use reminders</string>
+
+    <!-- Speech-to-text notes -->
+    <string name="btn_dictate_notes">Dictate Note</string>
+    <string name="speech_prompt">Speak your note</string>
+    <string name="speech_unavailable">Speech recognition is not available on this device</string>
+
+    <!-- Meeting Recorder -->
+    <string name="meeting_recorder_title">Meeting Recorder</string>
+    <string name="meeting_start">Start Recording</string>
+    <string name="meeting_stop">Stop Recording</string>
+    <string name="meeting_recording">Recording… tap Stop when done</string>
+    <string name="meeting_stopped">Recording stopped — review and save</string>
+    <string name="meeting_idle">Ready to record</string>
+    <string name="meeting_saved">Meeting notes saved to contact</string>
+    <string name="meeting_key_actions">Key Actions</string>
+    <string name="meeting_transcript_title">Transcript</string>
+    <string name="meeting_transcript_empty">(Listening…)</string>
+    <string name="meeting_no_actions">No key actions detected yet</string>
+    <string name="meeting_save">Save to Contact</string>
+    <string name="meeting_share_chooser">Share meeting notes via…</string>
+    <string name="meeting_recording_error">Recording error (code %d)</string>
+    <string name="btn_record_meeting">Record Meeting</string>
+    <string name="record_permission_denied">Microphone permission required for meeting recording</string>
+
+    <!-- Widget -->
+    <plurals name="widget_contact_count">
+        <item quantity="one">%d contact</item>
+        <item quantity="other">%d contacts</item>
+    </plurals>
+
+    <!-- Interaction log -->
+    <string name="delete_interaction_title">Delete this interaction?</string>
+    <string-array name="interaction_types">
+        <item>Note</item>
+        <item>Call</item>
+        <item>Meeting</item>
+        <item>Email</item>
+    </string-array>
+
+    <!-- MergeDuplicatesActivity -->
+    <string name="btn_merge">Merge</string>
+    <string name="contacts_merged">Contacts merged</string>
+    <string name="merge_field_empty">(empty)</string>
+
+    <!-- About dialog -->
+    <string name="about_view_source">View Source</string>
+</resources>

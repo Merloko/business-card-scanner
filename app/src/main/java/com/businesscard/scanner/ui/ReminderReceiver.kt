@@ -1,0 +1,47 @@
+package com.businesscard.scanner.ui
+
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import androidx.core.app.NotificationCompat
+import com.businesscard.scanner.R
+
+class ReminderReceiver : BroadcastReceiver() {
+
+    override fun onReceive(context: Context, intent: Intent) {
+        val cardName = intent.getStringExtra(EXTRA_CARD_NAME).orEmpty().ifBlank {
+            context.getString(R.string.fallback_unknown_name)
+        }
+        val cardId = intent.getLongExtra(EXTRA_CARD_ID, -1L)
+
+        val openIntent = Intent(context, ContactDetailActivity::class.java).apply {
+            putExtra(ContactDetailActivity.EXTRA_CARD_ID, cardId)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pending = PendingIntent.getActivity(
+            context, (cardId and 0x7FFFFFFF).toInt(), openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_person_add)
+            .setContentTitle(context.getString(R.string.reminder_title))
+            .setContentText(context.getString(R.string.reminder_text, cardName))
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify((cardId and 0x7FFFFFFF).toInt(), notification)
+    }
+
+    companion object {
+        const val EXTRA_CARD_NAME = "extra_card_name"
+        const val EXTRA_CARD_ID = "extra_card_id"
+        const val CHANNEL_ID = "reminders"
+        const val CHANNEL_NAME = "Follow-up Reminders"
+    }
+}

@@ -147,6 +147,7 @@
     <!-- Follow-up reminder -->
     <string name="action_set_reminder">Set Reminder</string>
     <string name="reminder_set">Reminder set</string>
+    <string name="reminder_set_inexact">Reminder set (approximate time — grant exact alarm permission in Settings for precise timing)</string>
     <string name="reminder_title">Follow-up Reminder</string>
     <string name="reminder_text">Time to follow up with %s</string>
     <string name="notification_permission_needed">Enable notifications in Settings to use reminders</string>

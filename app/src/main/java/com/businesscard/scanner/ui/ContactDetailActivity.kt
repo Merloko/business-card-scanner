@@ -487,12 +487,14 @@ class ContactDetailActivity : AppCompatActivity() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val alarmManager = getSystemService(AlarmManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
+        val exactGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
+        if (exactGranted) {
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMs, pending)
         } else {
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMs, pending)
         }
-        Toast.makeText(this, getString(R.string.reminder_set), Toast.LENGTH_SHORT).show()
+        val msg = if (exactGranted) R.string.reminder_set else R.string.reminder_set_inexact
+        Toast.makeText(this, getString(msg), Toast.LENGTH_LONG).show()
     }
 
     override fun onSupportNavigateUp(): Boolean {

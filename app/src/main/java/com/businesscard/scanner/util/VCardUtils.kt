@@ -10,7 +10,7 @@ object VCardUtils {
         .replace(";", "\\;")
         .replace(",", "\\,")
         .replace("\r", "")
-        .replace("\n", " ")
+        .replace("\n", "\\n")
 
     fun dialable(number: String): String {
         val sb = StringBuilder()

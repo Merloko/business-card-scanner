@@ -59,11 +59,20 @@ class VCardRoundTripTest {
         assertEquals(expectedPhones, parsedPhones)
     }
 
-    @Test fun `notes without newlines survive round-trip`() {
+    @Test fun `notes with commas and semicolons survive round-trip`() {
         val original = BusinessCard(
             personName = "Jane Doe",
             email = "jane@example.com",
             notes = "Met at conference, great contact; follow up"
+        )
+        assertEquals(original.notes, roundTrip(original).notes)
+    }
+
+    @Test fun `notes with embedded newline survive round-trip`() {
+        val original = BusinessCard(
+            personName = "Jane Doe",
+            email = "jane@example.com",
+            notes = "line one\nline two"
         )
         assertEquals(original.notes, roundTrip(original).notes)
     }

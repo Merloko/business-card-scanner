@@ -38,8 +38,7 @@ android {
         }
     } else {
         val requestedRelease = gradle.startParameter.taskNames.any { name ->
-            name.contains("release", ignoreCase = true) &&
-            (name.contains("assemble", ignoreCase = true) || name.contains("bundle", ignoreCase = true))
+            name.contains("release", ignoreCase = true)
         }
         if (requestedRelease) {
             throw GradleException(

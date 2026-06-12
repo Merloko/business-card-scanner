@@ -34,8 +34,8 @@ class VCardUtilsTest {
         assertEquals("ab", VCardUtils.vcfEscape("a\rb"))
     }
 
-    @Test fun `LF replaced with space`() {
-        assertEquals("a b", VCardUtils.vcfEscape("a\nb"))
+    @Test fun `LF encoded as backslash-n escape sequence`() {
+        assertEquals("a\\nb", VCardUtils.vcfEscape("a\nb"))
     }
 
     @Test fun `empty string unchanged`() {
@@ -126,11 +126,10 @@ class VCardUtilsTest {
         assertTrue(vcard.contains("N:张三丰;;"))
     }
 
-    @Test fun `newline in notes normalised to space on export`() {
-        // vcfEscape converts \n → space; documents the intentional asymmetry with
-        // VCardParser which expands \n escapes to real newlines on import
+    @Test fun `newline in notes encoded as backslash-n escape on export`() {
+        // vcfEscape converts \n → \\n; symmetric with VCardParser which expands \n back
         val vcard = VCardUtils.buildVCardText(card(notes = "line one\nline two"))
         val noteLine = vcard.lines().first { it.startsWith("NOTE:") }
-        assertEquals("NOTE:line one line two", noteLine)
+        assertEquals("NOTE:line one\\nline two", noteLine)
     }
 }

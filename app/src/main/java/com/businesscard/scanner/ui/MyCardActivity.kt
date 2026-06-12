@@ -139,6 +139,7 @@ class MyCardActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    nfcWritePending = false
                     Toast.makeText(this@MyCardActivity, getString(R.string.nfc_write_failed, e.message), Toast.LENGTH_SHORT).show()
                 }
             }

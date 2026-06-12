@@ -1,6 +1,7 @@
 package com.businesscard.scanner.util
 
 import com.businesscard.scanner.data.BusinessCard
+import com.businesscard.scanner.ocr.CjkUtils
 
 object CsvUtils {
 
@@ -51,9 +52,11 @@ object CsvUtils {
     fun csvField(value: String) = "\"${value.replace("\"", "\"\"")}\""
 
     fun splitName(fullName: String): Pair<String, String> {
-        val parts = fullName.trim().split(Regex("\\s+"))
+        val trimmed = fullName.trim()
+        if (CjkUtils.containsCjk(trimmed)) return Pair(trimmed, "")
+        val parts = trimmed.split(Regex("\\s+"))
         return if (parts.size >= 2) Pair(parts.dropLast(1).joinToString(" "), parts.last())
-        else Pair(fullName, "")
+        else Pair(trimmed, "")
     }
 
     fun buildCsv(cards: List<BusinessCard>): String {

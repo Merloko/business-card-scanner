@@ -97,6 +97,14 @@ class CsvUtilsTest {
         assertEquals(Pair("John", "Smith"), CsvUtils.splitName("  John  Smith  "))
     }
 
+    @Test fun `CJK name kept intact with empty last name`() {
+        assertEquals(Pair("田中一郎", ""), CsvUtils.splitName("田中一郎"))
+    }
+
+    @Test fun `CJK name with space not split on whitespace`() {
+        assertEquals(Pair("田中 一郎", ""), CsvUtils.splitName("田中 一郎"))
+    }
+
     // ──── csvField ────
 
     @Test fun `plain value wrapped in quotes`() {

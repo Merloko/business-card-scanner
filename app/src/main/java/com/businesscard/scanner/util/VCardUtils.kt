@@ -5,6 +5,8 @@ import com.businesscard.scanner.ocr.CjkUtils
 
 object VCardUtils {
 
+    private val WHITESPACE = Regex("\\s+")
+
     fun vcfEscape(s: String) = s
         .replace("\\", "\\\\")
         .replace(";", "\\;")
@@ -25,7 +27,7 @@ object VCardUtils {
         appendLine("BEGIN:VCARD")
         appendLine("VERSION:3.0")
         appendLine("FN:${vcfEscape(card.personName)}")
-        val nameParts = card.personName.trim().split(Regex("\\s+"))
+        val nameParts = card.personName.trim().split(WHITESPACE)
         val (lastName, firstName) = when {
             CjkUtils.containsCjk(card.personName) -> Pair(card.personName, "")
             nameParts.size >= 2 -> Pair(nameParts.last(), nameParts.dropLast(1).joinToString(" "))

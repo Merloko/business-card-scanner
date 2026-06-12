@@ -5,6 +5,9 @@ import com.businesscard.scanner.ocr.CjkUtils
 
 object CsvUtils {
 
+    private val NON_ALPHA = Regex("[^a-z ]")
+    private val WHITESPACE = Regex("\\s+")
+
     fun parseCsvLine(line: String): List<String> {
         val fields = mutableListOf<String>()
         val sb = StringBuilder()
@@ -28,10 +31,9 @@ object CsvUtils {
     }
 
     fun mapCsvHeaders(headers: List<String>): Map<String, Int> {
-        val nonAlpha = Regex("[^a-z ]")
         val map = mutableMapOf<String, Int>()
         headers.forEachIndexed { i, h ->
-            when (h.trim().lowercase().replace(nonAlpha, "")) {
+            when (h.trim().lowercase().replace(NON_ALPHA, "")) {
                 "first name", "firstname", "given name" -> map["firstName"] = i
                 "last name", "lastname", "surname", "family name" -> map["lastName"] = i
                 "name", "full name", "fullname", "display name", "contact name" -> map["fullName"] = i
@@ -54,7 +56,7 @@ object CsvUtils {
     fun splitName(fullName: String): Pair<String, String> {
         val trimmed = fullName.trim()
         if (CjkUtils.containsCjk(trimmed)) return Pair(trimmed, "")
-        val parts = trimmed.split(Regex("\\s+"))
+        val parts = trimmed.split(WHITESPACE)
         return if (parts.size >= 2) Pair(parts.dropLast(1).joinToString(" "), parts.last())
         else Pair(trimmed, "")
     }

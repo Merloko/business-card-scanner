@@ -71,8 +71,8 @@ object CsvUtils {
             val (first, last) = splitName(card.personName)
             listOf(
                 first, last, card.companyName, card.jobTitle,
-                card.phone.lines().firstOrNull().orEmpty(),
-                card.mobile.lines().firstOrNull().orEmpty(),
+                card.phone.lines().firstOrNull { it.isNotBlank() }.orEmpty(),
+                card.mobile.lines().firstOrNull { it.isNotBlank() }.orEmpty(),
                 card.email, card.website, card.address,
                 // Collapse newlines so each contact stays on a single CSV row.
                 // parseCsvLine has no multi-line quoted-field awareness.

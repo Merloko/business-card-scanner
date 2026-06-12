@@ -59,7 +59,7 @@ object VCardParser {
         val address = fields.entries
             .firstOrNull { (k, _) -> k == "ADR" || k.startsWith("ADR;") }
             ?.value?.firstOrNull()
-            ?.let { splitComponents(it).filter { it.isNotBlank() }.joinToString(", ") } ?: ""
+            ?.let { splitComponents(it).filter { it.trim().isNotBlank() }.joinToString(", ") } ?: ""
 
         val note = fields.entries
             .firstOrNull { (k, _) -> k == "NOTE" || k.startsWith("NOTE;") }

@@ -112,12 +112,17 @@ object TextParser {
         return Pair(landlines.joinToString("\n"), mobiles.joinToString("\n"))
     }
 
+    private val ABN_PATTERN = Regex("""(?i)ABN\s*:?\s*\d[\d\s]{8,13}""")
+    private val ACN_PATTERN = Regex("""(?i)ACN\s*:?\s*\d[\d\s]{6,10}""")
+    private val BSB_PATTERN = Regex("""(?i)BSB\s*:?\s*\d[\d\s-]{5,9}""")
+    private val TFN_PATTERN = Regex("""(?i)TFN\s*:?\s*\d[\d\s]{6,10}""")
+
     // Erase ABN, ACN, BSB, TFN and similar AU business identifiers before phone matching
     private fun stripBusinessIdentifiers(text: String): String = text
-        .replace(Regex("""(?i)ABN\s*:?\s*\d[\d\s]{8,13}"""), "")
-        .replace(Regex("""(?i)ACN\s*:?\s*\d[\d\s]{6,10}"""), "")
-        .replace(Regex("""(?i)BSB\s*:?\s*\d[\d\s-]{5,9}"""), "")
-        .replace(Regex("""(?i)TFN\s*:?\s*\d[\d\s]{6,10}"""), "")
+        .replace(ABN_PATTERN, "")
+        .replace(ACN_PATTERN, "")
+        .replace(BSB_PATTERN, "")
+        .replace(TFN_PATTERN, "")
 
     // Strips trailing text annotations like "(AUS)", "(FAX)" after the last digit
     private fun trimToLastDigit(s: String): String {

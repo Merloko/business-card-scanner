@@ -94,7 +94,7 @@ class MainActivity : AppCompatActivity() {
             onDeleteClick = { card -> viewModel.delete(card) },
             onLongPress = { startBatchMode() },
             onSelectionChanged = { ids ->
-                actionMode?.title = "${ids.size} selected"
+                actionMode?.title = getString(R.string.n_selected, ids.size)
                 if (ids.isEmpty() && adapter.selectionMode) {
                     actionMode?.finish()
                 }
@@ -113,7 +113,7 @@ class MainActivity : AppCompatActivity() {
                 if (pos == androidx.recyclerview.widget.RecyclerView.NO_POSITION) return
                 val card = adapter.currentList.getOrNull(pos) ?: return
                 viewModel.delete(card)
-                Snackbar.make(binding.root, "${card.personName.ifBlank { "Contact" }} deleted", Snackbar.LENGTH_LONG)
+                Snackbar.make(binding.root, getString(R.string.contact_deleted, card.personName.ifBlank { getString(R.string.fallback_unknown_name) }), Snackbar.LENGTH_LONG)
                     .setAction(R.string.undo) { viewModel.insert(card) }
                     .show()
             }
@@ -181,7 +181,7 @@ class MainActivity : AppCompatActivity() {
         actionMode = startActionMode(object : ActionMode.Callback {
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 mode.menuInflater.inflate(R.menu.menu_batch, menu)
-                mode.title = "0 selected"
+                mode.title = getString(R.string.n_selected, 0)
                 return true
             }
             override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false

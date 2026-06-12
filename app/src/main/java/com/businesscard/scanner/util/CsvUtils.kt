@@ -39,7 +39,7 @@ object CsvUtils {
                 "job title", "title", "position", "jobtitle", "role" -> map["jobTitle"] = i
                 "business phone", "phone", "telephone", "work phone", "tel", "phone number" -> map["phone"] = i
                 "mobile phone", "mobile", "cell", "cell phone", "cellular", "mobile number" -> map["mobile"] = i
-                "e-mail address", "email", "e-mail", "email address", "mail" -> map["email"] = i
+                "email", "email address", "mail" -> map["email"] = i
                 "web page", "website", "url", "web", "homepage", "website url" -> map["website"] = i
                 "business street", "address", "street address", "street", "full address" -> map["address"] = i
                 "notes", "note", "comments", "comment", "memo" -> map["notes"] = i

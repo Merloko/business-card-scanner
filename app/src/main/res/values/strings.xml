@@ -111,6 +111,8 @@
     <string name="saved">Saved</string>
 
     <!-- MainActivity -->
+    <string name="n_selected">%d selected</string>
+    <string name="contact_deleted">%s deleted</string>
     <string name="no_contacts_to_export">No contacts to export</string>
     <string name="no_contacts_to_backup">No contacts to back up</string>
     <string name="export_via_chooser">Export contacts via…</string>

@@ -123,15 +123,21 @@ class MyCardActivity : AppCompatActivity() {
                 val ndef = Ndef.get(tag)
                 if (ndef != null) {
                     ndef.connect()
-                    if (!ndef.isWritable) throw Exception("Tag is read-only")
-                    if (ndef.maxSize < message.byteArrayLength) throw Exception("Tag capacity too small")
-                    ndef.writeNdefMessage(message)
-                    ndef.close()
+                    try {
+                        if (!ndef.isWritable) throw Exception("Tag is read-only")
+                        if (ndef.maxSize < message.byteArrayLength) throw Exception("Tag capacity too small")
+                        ndef.writeNdefMessage(message)
+                    } finally {
+                        ndef.close()
+                    }
                 } else {
                     val formatable = NdefFormatable.get(tag) ?: throw Exception("Tag not NDEF-compatible")
                     formatable.connect()
-                    formatable.format(message)
-                    formatable.close()
+                    try {
+                        formatable.format(message)
+                    } finally {
+                        formatable.close()
+                    }
                 }
                 withContext(Dispatchers.Main) {
                     nfcWritePending = false

@@ -38,6 +38,9 @@ import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 class MainActivity : AppCompatActivity() {
 
@@ -46,8 +49,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: BusinessCardAdapter
     private var actionMode: ActionMode? = null
 
-    private val pickJsonFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { restoreFromJson(it) }
+    private val pickBackupFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let { restoreFromBackup(it) }
     }
 
     // Use "*/*" so both "text/x-vcard" (legacy) and "text/vcard" (RFC 6350) files appear in the picker.
@@ -324,8 +327,8 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_export  -> { exportCsv(); true }
-            R.id.action_backup  -> { backupJson(); true }
-            R.id.action_restore -> { pickJsonFile.launch("application/json"); true }
+            R.id.action_backup  -> { backupZip(); true }
+            R.id.action_restore -> { pickBackupFile.launch("*/*"); true }
             R.id.action_about   -> { showAbout(); true }
             R.id.theme_system -> { setNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM); true }
             R.id.theme_light  -> { setNightMode(AppCompatDelegate.MODE_NIGHT_NO); true }
@@ -363,7 +366,7 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun backupJson() {
+    private fun backupZip() {
         lifecycleScope.launch {
             val cards = viewModel.getAllCardsList()
             if (cards.isEmpty()) {
@@ -371,41 +374,65 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
             val date = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
-            val json = withContext(Dispatchers.Default) {
-                JSONObject().apply {
-                    put("version", 1)
-                    put("exportDate", SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()))
-                    put("contacts", JSONArray().also { arr ->
+            val zipFile = File(cacheDir, "exports/bizcard_backup_$date.zip")
+            try {
+                withContext(Dispatchers.IO) {
+                    zipFile.parentFile?.mkdirs()
+                    ZipOutputStream(zipFile.outputStream().buffered()).use { zos ->
+                        // Map absolute image paths → relative entry names inside the ZIP
+                        val imageEntries = mutableMapOf<String, String>()
                         cards.forEach { card ->
-                            arr.put(JSONObject().apply {
-                                put("personName",    card.personName)
-                                put("companyName",   card.companyName)
-                                put("jobTitle",      card.jobTitle)
-                                put("phone",         card.phone)
-                                put("mobile",        card.mobile)
-                                put("email",         card.email)
-                                put("website",       card.website)
-                                put("address",       card.address)
-                                put("notes",         card.notes)
-                                put("tags",          card.tags)
-                                put("rawTextFront",  card.rawTextFront)
-                                put("rawTextBack",   card.rawTextBack)
-                                put("frontImagePath", "")
-                                put("backImagePath", "")
-                                put("createdAt",     card.createdAt)
-                            })
+                            for (imgPath in listOf(card.frontImagePath, card.backImagePath)) {
+                                if (imgPath.isNotBlank() && imgPath !in imageEntries) {
+                                    val imgFile = File(imgPath)
+                                    if (imgFile.exists()) {
+                                        val entryName = "images/${imgFile.name}"
+                                        imageEntries[imgPath] = entryName
+                                        zos.putNextEntry(ZipEntry(entryName))
+                                        imgFile.inputStream().use { it.copyTo(zos) }
+                                        zos.closeEntry()
+                                    }
+                                }
+                            }
                         }
-                    })
-                }.toString(2)
+                        // Embed JSON with relative image paths
+                        val json = JSONObject().apply {
+                            put("version", 2)
+                            put("exportDate", SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()))
+                            put("contacts", JSONArray().also { arr ->
+                                cards.forEach { card ->
+                                    arr.put(JSONObject().apply {
+                                        put("personName",    card.personName)
+                                        put("companyName",   card.companyName)
+                                        put("jobTitle",      card.jobTitle)
+                                        put("phone",         card.phone)
+                                        put("mobile",        card.mobile)
+                                        put("email",         card.email)
+                                        put("website",       card.website)
+                                        put("address",       card.address)
+                                        put("notes",         card.notes)
+                                        put("tags",          card.tags)
+                                        put("rawTextFront",  card.rawTextFront)
+                                        put("rawTextBack",   card.rawTextBack)
+                                        put("frontImagePath", imageEntries[card.frontImagePath] ?: "")
+                                        put("backImagePath",  imageEntries[card.backImagePath] ?: "")
+                                        put("createdAt",     card.createdAt)
+                                    })
+                                }
+                            })
+                        }.toString(2)
+                        zos.putNextEntry(ZipEntry("backup.json"))
+                        zos.write(json.toByteArray(Charsets.UTF_8))
+                        zos.closeEntry()
+                    }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, getString(R.string.restore_failed, e.message), Toast.LENGTH_LONG).show()
+                return@launch
             }
-            val file = File(cacheDir, "exports/bizcard_backup_$date.json")
-            withContext(Dispatchers.IO) {
-                file.parentFile?.mkdirs()
-                file.writeText(json)
-            }
-            val uri = FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", file)
+            val uri = FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", zipFile)
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/json"
+                type = "application/zip"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 putExtra(Intent.EXTRA_SUBJECT, "Business Card Backup $date")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -418,50 +445,98 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun restoreFromJson(uri: Uri) {
+    private fun restoreFromBackup(uri: Uri) {
         lifecycleScope.launch {
             try {
-                val maxBytes = 10 * 1024 * 1024
-                val bytes = withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.use { it.readBytesWithLimit(maxBytes) }
-                } ?: throw Exception("Could not read file or backup exceeds 10 MB limit")
-                val text = bytes.toString(Charsets.UTF_8)
-                val root = JSONObject(text)
-                val arr = root.getJSONArray("contacts")
-                var count = 0
-                for (i in 0 until arr.length()) {
-                    val o = arr.getJSONObject(i)
-                    fun str(key: String) = if (o.has(key)) o.getString(key) else ""
-                    fun long(key: String) = if (o.has(key)) o.getLong(key) else System.currentTimeMillis()
-                    val card = BusinessCard(
-                        personName     = str("personName"),
-                        companyName    = str("companyName"),
-                        jobTitle       = str("jobTitle"),
-                        phone          = str("phone"),
-                        mobile         = str("mobile"),
-                        email          = str("email"),
-                        website        = str("website"),
-                        address        = str("address"),
-                        notes          = str("notes"),
-                        tags           = str("tags"),
-                        rawTextFront   = str("rawTextFront"),
-                        rawTextBack    = str("rawTextBack"),
-                        frontImagePath = str("frontImagePath"),
-                        backImagePath  = str("backImagePath"),
-                        createdAt      = long("createdAt")
-                    )
-                    // Use exact (AND) deduplication for bulk import to avoid blocking
-                    // different people who share only a name or only an email.
-                    val dup = viewModel.findExactDuplicate(card.personName, card.email)
-                        ?: if (card.personName.isBlank() || card.email.isBlank())
-                            viewModel.findDuplicate(card.personName, card.email) else null
-                    if (dup == null) { viewModel.insertNow(card); count++ }
+                // Detect format by ZIP magic bytes (PK = 0x50 0x4B)
+                val isZip = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.use { s ->
+                        val magic = ByteArray(2)
+                        s.read(magic) == 2 && magic[0] == 0x50.toByte() && magic[1] == 0x4B.toByte()
+                    } ?: false
                 }
+                val count = if (isZip) restoreFromZip(uri) else restoreFromLegacyJson(uri)
                 Toast.makeText(this@MainActivity, getString(R.string.restored_contacts, count), Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, getString(R.string.restore_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private suspend fun restoreFromZip(uri: Uri): Int {
+        val imageEntryToPath = mutableMapOf<String, String>()
+        var jsonBytes: ByteArray? = null
+        withContext(Dispatchers.IO) {
+            contentResolver.openInputStream(uri)?.use { stream ->
+                ZipInputStream(stream.buffered()).use { zis ->
+                    var entry = zis.nextEntry
+                    while (entry != null) {
+                        if (!entry.isDirectory) {
+                            when {
+                                entry.name.startsWith("images/") -> {
+                                    val dest = File(filesDir, entry.name.removePrefix("images/"))
+                                    dest.outputStream().use { zis.copyTo(it) }
+                                    imageEntryToPath[entry.name] = dest.absolutePath
+                                }
+                                entry.name == "backup.json" -> jsonBytes = zis.readBytes()
+                            }
+                        }
+                        zis.closeEntry()
+                        entry = zis.nextEntry
+                    }
+                }
+            } ?: throw Exception("Could not open backup file")
+        }
+        val text = jsonBytes?.toString(Charsets.UTF_8)
+            ?: throw Exception("backup.json not found in archive")
+        return parseAndInsertCards(text, imageEntryToPath)
+    }
+
+    private suspend fun restoreFromLegacyJson(uri: Uri): Int {
+        val maxBytes = 10 * 1024 * 1024
+        val bytes = withContext(Dispatchers.IO) {
+            contentResolver.openInputStream(uri)?.use { it.readBytesWithLimit(maxBytes) }
+        } ?: throw Exception("Could not read file or backup exceeds 10 MB limit")
+        return parseAndInsertCards(bytes.toString(Charsets.UTF_8), emptyMap())
+    }
+
+    private suspend fun parseAndInsertCards(
+        jsonText: String,
+        imageEntryToPath: Map<String, String>
+    ): Int {
+        val root = JSONObject(jsonText)
+        val arr = root.getJSONArray("contacts")
+        var count = 0
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            fun str(key: String) = if (o.has(key)) o.getString(key) else ""
+            fun long(key: String) = if (o.has(key)) o.getLong(key) else System.currentTimeMillis()
+            val frontRel = str("frontImagePath")
+            val backRel  = str("backImagePath")
+            val card = BusinessCard(
+                personName     = str("personName"),
+                companyName    = str("companyName"),
+                jobTitle       = str("jobTitle"),
+                phone          = str("phone"),
+                mobile         = str("mobile"),
+                email          = str("email"),
+                website        = str("website"),
+                address        = str("address"),
+                notes          = str("notes"),
+                tags           = str("tags"),
+                rawTextFront   = str("rawTextFront"),
+                rawTextBack    = str("rawTextBack"),
+                frontImagePath = imageEntryToPath[frontRel] ?: frontRel,
+                backImagePath  = imageEntryToPath[backRel]  ?: backRel,
+                createdAt      = long("createdAt")
+            )
+            // AND-logic dedup avoids false positives when two people share only a name or only an email
+            val dup = viewModel.findExactDuplicate(card.personName, card.email)
+                ?: if (card.personName.isBlank() || card.email.isBlank())
+                    viewModel.findDuplicate(card.personName, card.email) else null
+            if (dup == null) { viewModel.insertNow(card); count++ }
+        }
+        return count
     }
 
     private fun importVCard(uri: Uri) {

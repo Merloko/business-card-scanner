@@ -473,8 +473,9 @@ class MainActivity : AppCompatActivity() {
                         ?: throw Exception("Could not open backup file")
                     stream.use { s ->
                         s.mark(2)
-                        val magic = ByteArray(2)
-                        val isZip = s.read(magic) == 2 && magic[0] == 0x50.toByte() && magic[1] == 0x4B.toByte()
+                        val b0 = s.read()
+                        val b1 = s.read()
+                        val isZip = b0 == 0x50 && b1 == 0x4B
                         s.reset()
                         if (isZip) restoreFromZip(s) else restoreFromLegacyJson(s)
                     }
@@ -580,8 +581,8 @@ class MainActivity : AppCompatActivity() {
                 tags           = str("tags"),
                 rawTextFront   = str("rawTextFront"),
                 rawTextBack    = str("rawTextBack"),
-                frontImagePath = imageEntryToPath[frontRel] ?: frontRel,
-                backImagePath  = imageEntryToPath[backRel]  ?: backRel,
+                frontImagePath = imageEntryToPath[frontRel] ?: "",
+                backImagePath  = imageEntryToPath[backRel]  ?: "",
                 createdAt      = long("createdAt")
             )
             val nameL  = card.personName.trim().lowercase()

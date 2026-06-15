@@ -50,6 +50,7 @@ object VCardParser {
                 ?.value?.firstOrNull()?.let { n ->
                     val parts = splitComponents(n)
                     "${parts.getOrElse(1) { "" }} ${parts.getOrElse(0) { "" }}".trim()
+                        .replace('\n', ' ').replace('\r', ' ')
                 } ?: ""
 
         val company = fields.entries

@@ -4,16 +4,15 @@ import java.nio.charset.Charset
 
 object VCardParser {
 
-    // RFC 6350 §3.2: fold is CRLF + 1 WSP. Negative lookbehind (?<!=) preserves
-    // vCard 2.1 QP soft line breaks (=\n WSP) so decodeQuotedPrintable can handle them.
-    private val LINE_FOLD = Regex("(?<!=)\n[ \t]+")
     private val VCARD_BLOCK = Regex("(?i)BEGIN:VCARD.*?END:VCARD", RegexOption.DOT_MATCHES_ALL)
 
     fun parse(content: String): List<BusinessCard> {
         val normalized = content.replace("\r\n", "\n").replace("\r", "\n")
-        val unfolded = normalized.replace(LINE_FOLD, "")
+        // Line-folding is handled per-property inside parseOne so that the QP
+        // soft-break mechanism (= at end of encoded line) and the RFC 6350
+        // fold mechanism (CRLF + single WSP) can be distinguished correctly.
         return VCARD_BLOCK
-            .findAll(unfolded)
+            .findAll(normalized)
             .map { parseOne(it.value) }
             .filter { it.personName.isNotBlank() || it.email.isNotBlank() }
             .toList()
@@ -21,25 +20,63 @@ object VCardParser {
 
     private fun parseOne(block: String): BusinessCard {
         val fields = mutableMapOf<String, MutableList<String>>()
-        for (line in block.lines()) {
-            val colonIdx = line.indexOf(':')
-            if (colonIdx < 0) continue
-            val rawKey = line.substring(0, colonIdx).uppercase().trim()
-            val rawValue = line.substring(colonIdx + 1)
+        val physicalLines = block.lines()
+        var i = 0
 
-            // Detect vCard 2.1 QUOTED-PRINTABLE encoding from property parameters.
+        while (i < physicalLines.size) {
+            val firstLine = physicalLines[i]
+            val colonIdx = firstLine.indexOf(':')
+            if (colonIdx < 0) { i++; continue }
+
+            val rawKey = firstLine.substring(0, colonIdx).uppercase().trim()
             val isQP = rawKey.contains("ENCODING=QUOTED-PRINTABLE") || rawKey.contains("ENCODING=QP")
             val charsetName = if (rawKey.contains("CHARSET=")) {
                 rawKey.substringAfter("CHARSET=").substringBefore(";").substringBefore(":").trim()
                     .takeIf { it.isNotEmpty() } ?: "UTF-8"
             } else "UTF-8"
 
-            val value = if (isQP) decodeQuotedPrintable(rawValue, charsetName) else rawValue.trim()
+            val value: String
+            if (isQP) {
+                // vCard 2.1 QP: a trailing '=' on the encoded value signals a QP soft
+                // line break; the next physical line is the continuation.  An optional
+                // leading WSP on that line is the vCard fold-indicator — strip it.
+                val qp = StringBuilder(firstLine.substring(colonIdx + 1))
+                while (qp.endsWith("=") && i + 1 < physicalLines.size) {
+                    qp.deleteCharAt(qp.length - 1) // remove the QP soft-break marker
+                    i++
+                    val cont = physicalLines[i]
+                    qp.append(
+                        if (cont.isNotEmpty() && (cont[0] == ' ' || cont[0] == '\t')) cont.substring(1)
+                        else cont
+                    )
+                }
+                // Consume any trailing RFC fold continuations (e.g. from non-QP params)
+                while (i + 1 < physicalLines.size) {
+                    val next = physicalLines[i + 1]
+                    if (next.isNotEmpty() && (next[0] == ' ' || next[0] == '\t')) {
+                        qp.append(next.substring(1)); i++
+                    } else break
+                }
+                // Drop any leading whitespace between ':' and the encoded value
+                value = decodeQuotedPrintable(qp.toString().trimStart(), charsetName)
+            } else {
+                // RFC 6350 §3.2: a continuation line starts with exactly one WSP char.
+                // Strip that char and join to rebuild the logical line.
+                val sb = StringBuilder(firstLine.substring(colonIdx + 1))
+                while (i + 1 < physicalLines.size) {
+                    val next = physicalLines[i + 1]
+                    if (next.isNotEmpty() && (next[0] == ' ' || next[0] == '\t')) {
+                        sb.append(next.substring(1)); i++
+                    } else break
+                }
+                value = sb.toString().trim()
+            }
 
             val baseKey = rawKey.substringBefore(";")
             if (value.isNotEmpty() && baseKey != "BEGIN" && baseKey != "END" && baseKey != "VERSION") {
                 fields.getOrPut(rawKey) { mutableListOf() }.add(value)
             }
+            i++
         }
 
         // Normalize display name: vCard \n sequences become real newlines after unescaping;
@@ -148,35 +185,39 @@ object VCardParser {
     }
 
     // Decodes a vCard 2.1 QUOTED-PRINTABLE encoded value.
-    // Handles soft line breaks (=\r\n or =\n) and hex-encoded bytes (=XX).
+    // QP soft line breaks and fold-indicator WSP are already stripped by parseOne;
+    // this function only needs to handle hex-encoded bytes (=XX) and literal chars.
     private fun decodeQuotedPrintable(encoded: String, charsetName: String): String {
         val bytes = mutableListOf<Byte>()
         var i = 0
         while (i < encoded.length) {
             when {
-                encoded[i] == '=' && i + 1 < encoded.length &&
-                        (encoded[i + 1] == '\n' || encoded[i + 1] == '\r') -> {
-                    // Soft line break — skip = and CRLF, then skip the optional vCard
-                    // fold-indicator WSP (the single space/tab that LINE_FOLD preserved).
+                encoded[i] != '=' -> {
+                    bytes.add(encoded[i].code.and(0xFF).toByte()); i++
+                }
+                i + 1 >= encoded.length -> {
+                    // Trailing bare '=' with nothing after — malformed, skip it
+                    i++
+                }
+                encoded[i + 1] == '\n' || encoded[i + 1] == '\r' -> {
+                    // Defensive: QP soft break (parseOne should have consumed these)
                     i++
                     if (i < encoded.length && encoded[i] == '\r') i++
                     if (i < encoded.length && encoded[i] == '\n') i++
-                    if (i < encoded.length && (encoded[i] == ' ' || encoded[i] == '\t')) i++
                 }
-                encoded[i] == '=' && i + 2 < encoded.length -> {
+                i + 2 >= encoded.length -> {
+                    // '=X' at end of string — incomplete hex sequence, skip
+                    i = encoded.length
+                }
+                else -> {
                     val hex = encoded.substring(i + 1, i + 3)
                     val byte = hex.toIntOrNull(16)
                     if (byte != null) {
-                        bytes.add(byte.toByte())
-                        i += 3
+                        bytes.add(byte.toByte()); i += 3
                     } else {
-                        bytes.add(encoded[i].code.toByte())
-                        i++
+                        // Not a valid hex pair — emit '=' literally and retry from i+1
+                        bytes.add('='.code.toByte()); i++
                     }
-                }
-                else -> {
-                    bytes.add(encoded[i].code.and(0xFF).toByte())
-                    i++
                 }
             }
         }

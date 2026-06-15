@@ -235,7 +235,7 @@ class MyCardActivity : AppCompatActivity() {
         for (line in phone.lines()) if (line.isNotBlank()) appendLine("TEL;TYPE=WORK:${VCardUtils.vcfEscape(line.trim())}")
         for (line in mobile.lines()) if (line.isNotBlank()) appendLine("TEL;TYPE=CELL:${VCardUtils.vcfEscape(line.trim())}")
         if (email.isNotBlank()) appendLine("EMAIL:${VCardUtils.vcfEscape(email)}")
-        if (website.isNotBlank()) appendLine("URL:${VCardUtils.vcfEscape(website)}")
+        if (website.isNotBlank()) appendLine("URL:${VCardUtils.vcfEscapeUri(website)}")
         append("END:VCARD")
     }
 

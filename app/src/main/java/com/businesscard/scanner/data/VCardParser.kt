@@ -4,8 +4,9 @@ import java.nio.charset.Charset
 
 object VCardParser {
 
-    // RFC 6350 §3.2: fold is CRLF + 1+ WSP; consume all WSP after the newline.
-    private val LINE_FOLD = Regex("\n[ \t]+")
+    // RFC 6350 §3.2: fold is CRLF + 1 WSP. Negative lookbehind (?<!=) preserves
+    // vCard 2.1 QP soft line breaks (=\n WSP) so decodeQuotedPrintable can handle them.
+    private val LINE_FOLD = Regex("(?<!=)\n[ \t]+")
     private val VCARD_BLOCK = Regex("(?i)BEGIN:VCARD.*?END:VCARD", RegexOption.DOT_MATCHES_ALL)
 
     fun parse(content: String): List<BusinessCard> {
@@ -155,10 +156,12 @@ object VCardParser {
             when {
                 encoded[i] == '=' && i + 1 < encoded.length &&
                         (encoded[i + 1] == '\n' || encoded[i + 1] == '\r') -> {
-                    // Soft line break — skip continuation marker and newline
+                    // Soft line break — skip = and CRLF, then skip the optional vCard
+                    // fold-indicator WSP (the single space/tab that LINE_FOLD preserved).
                     i++
                     if (i < encoded.length && encoded[i] == '\r') i++
                     if (i < encoded.length && encoded[i] == '\n') i++
+                    if (i < encoded.length && (encoded[i] == ' ' || encoded[i] == '\t')) i++
                 }
                 encoded[i] == '=' && i + 2 < encoded.length -> {
                     val hex = encoded.substring(i + 1, i + 3)

@@ -1,0 +1,23 @@
+Business Card Scanner lets you capture, organise, and search business cards entirely on your device. No account, no cloud, no data ever leaves your phone.
+
+Point your camera at a card, tap Capture, and the app extracts the name, company, job title, phone numbers, email, website, and address using on-device ML Kit OCR. A built-in parser debug panel shows exactly how each line was classified so you can spot and correct mistakes.
+
+FEATURES
+
+• Scan front and back of cards with your camera or import from the gallery
+• On-device OCR — works offline, supports English, Chinese (Simplified & Traditional), and Japanese
+• Search and filter contacts by name, company, or tag
+• Find and merge duplicate contacts
+• Log interactions (calls, meetings, emails, notes) per contact
+• Meeting Recorder — record audio, view live transcript, extract key actions
+• Follow-up reminders with notifications
+• My Digital Card — create your own card, share as QR code or write to an NFC tag
+• Event mode — tag every card scanned at an event with one tap
+• Import vCard (.vcf) and CSV files
+• Full backup to ZIP (contacts + scanned images + raw OCR text); restores on any device
+• Home screen widget
+• Light, dark, and system theme
+
+PRIVACY
+
+The app has no INTERNET permission and cannot make network connections. All OCR and ML processing uses bundled on-device models. Your contacts are stored only in a local database. Backups go directly to your chosen app — nothing is uploaded automatically.

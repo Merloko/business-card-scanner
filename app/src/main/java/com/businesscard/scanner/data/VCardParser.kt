@@ -1,8 +1,11 @@
 package com.businesscard.scanner.data
 
+import java.nio.charset.Charset
+
 object VCardParser {
 
-    private val LINE_FOLD = Regex("\n[ \t]")
+    // RFC 6350 §3.2: fold is CRLF + 1+ WSP; consume all WSP after the newline.
+    private val LINE_FOLD = Regex("\n[ \t]+")
     private val VCARD_BLOCK = Regex("(?i)BEGIN:VCARD.*?END:VCARD", RegexOption.DOT_MATCHES_ALL)
 
     fun parse(content: String): List<BusinessCard> {
@@ -20,14 +23,29 @@ object VCardParser {
         for (line in block.lines()) {
             val colonIdx = line.indexOf(':')
             if (colonIdx < 0) continue
-            val key = line.substring(0, colonIdx).uppercase().trim()
-            val value = line.substring(colonIdx + 1).trim()
-            if (value.isNotEmpty() && key != "BEGIN" && key != "END" && key != "VERSION") {
-                fields.getOrPut(key) { mutableListOf() }.add(value)
+            val rawKey = line.substring(0, colonIdx).uppercase().trim()
+            val rawValue = line.substring(colonIdx + 1)
+
+            // Detect vCard 2.1 QUOTED-PRINTABLE encoding from property parameters.
+            val isQP = rawKey.contains("ENCODING=QUOTED-PRINTABLE") || rawKey.contains("ENCODING=QP")
+            val charsetName = if (rawKey.contains("CHARSET=")) {
+                rawKey.substringAfter("CHARSET=").substringBefore(";").substringBefore(":").trim()
+                    .takeIf { it.isNotEmpty() } ?: "UTF-8"
+            } else "UTF-8"
+
+            val value = if (isQP) decodeQuotedPrintable(rawValue, charsetName) else rawValue.trim()
+
+            val baseKey = rawKey.substringBefore(";")
+            if (value.isNotEmpty() && baseKey != "BEGIN" && baseKey != "END" && baseKey != "VERSION") {
+                fields.getOrPut(rawKey) { mutableListOf() }.add(value)
             }
         }
 
-        val name = fields["FN"]?.firstOrNull()?.let { unescapeVcf(it) }
+        // Normalize display name: vCard \n sequences become real newlines after unescaping;
+        // replace them with spaces so personName is always a single displayable line.
+        val name = fields.entries
+            .firstOrNull { (k, _) -> k == "FN" || k.startsWith("FN;") }
+            ?.value?.firstOrNull()?.let { unescapeVcf(it).replace('\n', ' ').replace('\r', ' ').trim() }
             ?: fields.entries.firstOrNull { (k, _) -> k == "N" || k.startsWith("N;") }
                 ?.value?.firstOrNull()?.let { n ->
                     val parts = splitComponents(n)
@@ -62,7 +80,7 @@ object VCardParser {
         val address = fields.entries
             .firstOrNull { (k, _) -> k == "ADR" || k.startsWith("ADR;") }
             ?.value?.firstOrNull()
-            ?.let { splitComponents(it).filter { it.trim().isNotBlank() }.joinToString(", ") } ?: ""
+            ?.let { splitComponents(it).filter { component -> component.trim().isNotBlank() }.joinToString(", ") } ?: ""
 
         val note = fields.entries
             .firstOrNull { (k, _) -> k == "NOTE" || k.startsWith("NOTE;") }
@@ -125,5 +143,40 @@ object VCardParser {
         ','  -> ","
         'n', 'N' -> "\n"
         else -> "\\$c"
+    }
+
+    // Decodes a vCard 2.1 QUOTED-PRINTABLE encoded value.
+    // Handles soft line breaks (=\r\n or =\n) and hex-encoded bytes (=XX).
+    private fun decodeQuotedPrintable(encoded: String, charsetName: String): String {
+        val bytes = mutableListOf<Byte>()
+        var i = 0
+        while (i < encoded.length) {
+            when {
+                encoded[i] == '=' && i + 1 < encoded.length &&
+                        (encoded[i + 1] == '\n' || encoded[i + 1] == '\r') -> {
+                    // Soft line break — skip continuation marker and newline
+                    i++
+                    if (i < encoded.length && encoded[i] == '\r') i++
+                    if (i < encoded.length && encoded[i] == '\n') i++
+                }
+                encoded[i] == '=' && i + 2 < encoded.length -> {
+                    val hex = encoded.substring(i + 1, i + 3)
+                    val byte = hex.toIntOrNull(16)
+                    if (byte != null) {
+                        bytes.add(byte.toByte())
+                        i += 3
+                    } else {
+                        bytes.add(encoded[i].code.toByte())
+                        i++
+                    }
+                }
+                else -> {
+                    bytes.add(encoded[i].code.and(0xFF).toByte())
+                    i++
+                }
+            }
+        }
+        val cs = try { Charset.forName(charsetName) } catch (_: Exception) { Charsets.UTF_8 }
+        return bytes.toByteArray().toString(cs)
     }
 }

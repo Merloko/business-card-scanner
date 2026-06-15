@@ -121,6 +121,7 @@
     <string name="backup_via_chooser">Save backup via…</string>
     <string name="restored_contacts">Restored %d contacts</string>
     <string name="restore_failed">Restore failed: %s</string>
+    <string name="backup_failed">Backup failed: %s</string>
     <string name="nothing_selected">Nothing selected</string>
     <string name="batch_delete_title">Delete %d contacts?</string>
     <string name="batch_delete_message">This cannot be undone.</string>

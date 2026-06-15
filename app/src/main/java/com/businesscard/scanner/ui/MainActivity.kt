@@ -49,6 +49,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: BusinessCardAdapter
     private var actionMode: ActionMode? = null
 
+    companion object {
+        // Increment when the backup JSON schema changes; restoreFromBackup rejects backups
+        // with a higher version than this to prevent silent data corruption on older builds.
+        private const val BACKUP_VERSION = 2
+    }
+
     private val pickBackupFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { restoreFromBackup(it) }
     }
@@ -373,20 +379,31 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this@MainActivity, getString(R.string.no_contacts_to_backup), Toast.LENGTH_SHORT).show()
                 return@launch
             }
-            val date = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
+            // Capture once so filename and JSON exportDate always agree.
+            val now = Date()
+            val date = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(now)
             val zipFile = File(cacheDir, "exports/bizcard_backup_$date.zip")
             try {
                 withContext(Dispatchers.IO) {
                     zipFile.parentFile?.mkdirs()
                     ZipOutputStream(zipFile.outputStream().buffered()).use { zos ->
-                        // Map absolute image paths → relative entry names inside the ZIP
+                        // Map absolute image paths → unique relative entry names inside the ZIP.
+                        // Deduplicate basenames so two cards whose images share the same filename
+                        // don't produce a duplicate ZIP entry (which would silently overwrite on restore).
                         val imageEntries = mutableMapOf<String, String>()
+                        val usedEntryNames = mutableSetOf<String>()
                         cards.forEach { card ->
                             for (imgPath in listOf(card.frontImagePath, card.backImagePath)) {
                                 if (imgPath.isNotBlank() && imgPath !in imageEntries) {
                                     val imgFile = File(imgPath)
                                     if (imgFile.exists()) {
-                                        val entryName = "images/${imgFile.name}"
+                                        var entryName = "images/${imgFile.name}"
+                                        var suffix = 0
+                                        while (entryName in usedEntryNames) {
+                                            suffix++
+                                            entryName = "images/${imgFile.nameWithoutExtension}_$suffix.${imgFile.extension}"
+                                        }
+                                        usedEntryNames.add(entryName)
                                         imageEntries[imgPath] = entryName
                                         zos.putNextEntry(ZipEntry(entryName))
                                         imgFile.inputStream().use { it.copyTo(zos) }
@@ -397,8 +414,8 @@ class MainActivity : AppCompatActivity() {
                         }
                         // Embed JSON with relative image paths
                         val json = JSONObject().apply {
-                            put("version", 2)
-                            put("exportDate", SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()))
+                            put("version", BACKUP_VERSION)
+                            put("exportDate", SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(now))
                             put("contacts", JSONArray().also { arr ->
                                 cards.forEach { card ->
                                     arr.put(JSONObject().apply {
@@ -427,7 +444,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, getString(R.string.restore_failed, e.message), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, getString(R.string.backup_failed, e.message), Toast.LENGTH_LONG).show()
                 return@launch
             }
             val uri = FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", zipFile)
@@ -448,14 +465,20 @@ class MainActivity : AppCompatActivity() {
     private fun restoreFromBackup(uri: Uri) {
         lifecycleScope.launch {
             try {
-                // Detect format by ZIP magic bytes (PK = 0x50 0x4B)
-                val isZip = withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.use { s ->
+                val count = withContext(Dispatchers.IO) {
+                    // Open the content URI exactly once. BufferedInputStream.mark/reset allows
+                    // format detection without a second openInputStream call, which would fail
+                    // on single-read SAF URIs (e.g. some cloud storage providers).
+                    val stream = contentResolver.openInputStream(uri)?.buffered()
+                        ?: throw Exception("Could not open backup file")
+                    stream.use { s ->
+                        s.mark(2)
                         val magic = ByteArray(2)
-                        s.read(magic) == 2 && magic[0] == 0x50.toByte() && magic[1] == 0x4B.toByte()
-                    } ?: false
+                        val isZip = s.read(magic) == 2 && magic[0] == 0x50.toByte() && magic[1] == 0x4B.toByte()
+                        s.reset()
+                        if (isZip) restoreFromZip(s) else restoreFromLegacyJson(s)
+                    }
                 }
-                val count = if (isZip) restoreFromZip(uri) else restoreFromLegacyJson(uri)
                 Toast.makeText(this@MainActivity, getString(R.string.restored_contacts, count), Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, getString(R.string.restore_failed, e.message), Toast.LENGTH_LONG).show()
@@ -463,40 +486,56 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun restoreFromZip(uri: Uri): Int {
+    private suspend fun restoreFromZip(stream: InputStream): Int {
         val imageEntryToPath = mutableMapOf<String, String>()
         var jsonBytes: ByteArray? = null
-        withContext(Dispatchers.IO) {
-            contentResolver.openInputStream(uri)?.use { stream ->
-                ZipInputStream(stream.buffered()).use { zis ->
-                    var entry = zis.nextEntry
-                    while (entry != null) {
-                        if (!entry.isDirectory) {
-                            when {
-                                entry.name.startsWith("images/") -> {
-                                    val dest = File(filesDir, entry.name.removePrefix("images/"))
-                                    dest.outputStream().use { zis.copyTo(it) }
-                                    imageEntryToPath[entry.name] = dest.absolutePath
+        val filesCanonical = filesDir.canonicalPath + File.separator
+        var totalImageBytes = 0L
+        val imageByteLimit = 2L * 1024 * 1024 * 1024 // 2 GB total across all images
+
+        ZipInputStream(stream).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                if (!entry.isDirectory) {
+                    when {
+                        entry.name.startsWith("images/") -> {
+                            val imageName = entry.name.removePrefix("images/")
+                            val dest = File(filesDir, imageName)
+                            // Path-traversal guard: reject any entry that escapes filesDir.
+                            if (dest.canonicalPath.startsWith(filesCanonical)) {
+                                dest.parentFile?.mkdirs()
+                                dest.outputStream().use { out ->
+                                    val buf = ByteArray(8192)
+                                    var n: Int
+                                    while (zis.read(buf).also { n = it } != -1) {
+                                        totalImageBytes += n
+                                        if (totalImageBytes > imageByteLimit) {
+                                            throw Exception("Backup images exceed 2 GB limit")
+                                        }
+                                        out.write(buf, 0, n)
+                                    }
                                 }
-                                entry.name == "backup.json" -> jsonBytes = zis.readBytes()
+                                imageEntryToPath[entry.name] = dest.absolutePath
                             }
                         }
-                        zis.closeEntry()
-                        entry = zis.nextEntry
+                        entry.name == "backup.json" -> {
+                            jsonBytes = zis.readBytesWithLimit(50 * 1024 * 1024)
+                                ?: throw Exception("backup.json exceeds 50 MB limit")
+                        }
                     }
                 }
-            } ?: throw Exception("Could not open backup file")
+                zis.closeEntry()
+                entry = zis.nextEntry
+            }
         }
         val text = jsonBytes?.toString(Charsets.UTF_8)
             ?: throw Exception("backup.json not found in archive")
         return parseAndInsertCards(text, imageEntryToPath)
     }
 
-    private suspend fun restoreFromLegacyJson(uri: Uri): Int {
-        val maxBytes = 10 * 1024 * 1024
-        val bytes = withContext(Dispatchers.IO) {
-            contentResolver.openInputStream(uri)?.use { it.readBytesWithLimit(maxBytes) }
-        } ?: throw Exception("Could not read file or backup exceeds 10 MB limit")
+    private suspend fun restoreFromLegacyJson(stream: InputStream): Int {
+        val bytes = stream.readBytesWithLimit(10 * 1024 * 1024)
+            ?: throw Exception("Could not read file or backup exceeds 10 MB limit")
         return parseAndInsertCards(bytes.toString(Charsets.UTF_8), emptyMap())
     }
 
@@ -505,7 +544,22 @@ class MainActivity : AppCompatActivity() {
         imageEntryToPath: Map<String, String>
     ): Int {
         val root = JSONObject(jsonText)
+        // Forward-compatibility guard: refuse backups from newer app versions that may
+        // have an incompatible schema, rather than silently importing garbled data.
+        val version = if (root.has("version")) root.getInt("version") else 1
+        if (version > BACKUP_VERSION) {
+            throw Exception("Backup was created by a newer version of the app (v$version). Please update the app to restore this backup.")
+        }
         val arr = root.getJSONArray("contacts")
+
+        // Pre-load existing records once to avoid N×2 Room round-trips inside the import loop.
+        val existing = viewModel.getAllCardsList()
+        val exactKeys = existing
+            .map { "${it.personName.trim().lowercase()}|${it.email.trim().lowercase()}" }
+            .toHashSet()
+        val existingNames  = existing.mapTo(HashSet()) { it.personName.trim().lowercase() }.also { it.remove("") }
+        val existingEmails = existing.mapTo(HashSet()) { it.email.trim().lowercase() }.also { it.remove("") }
+
         var count = 0
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
@@ -530,11 +584,23 @@ class MainActivity : AppCompatActivity() {
                 backImagePath  = imageEntryToPath[backRel]  ?: backRel,
                 createdAt      = long("createdAt")
             )
-            // AND-logic dedup avoids false positives when two people share only a name or only an email
-            val dup = viewModel.findExactDuplicate(card.personName, card.email)
-                ?: if (card.personName.isBlank() || card.email.isBlank())
-                    viewModel.findDuplicate(card.personName, card.email) else null
-            if (dup == null) { viewModel.insertNow(card); count++ }
+            val nameL  = card.personName.trim().lowercase()
+            val emailL = card.email.trim().lowercase()
+            // AND-logic dedup: exact match on both fields; fall back to single-field when one is blank.
+            val isDup = if (nameL.isNotEmpty() && emailL.isNotEmpty()) {
+                "$nameL|$emailL" in exactKeys
+            } else {
+                (nameL.isNotEmpty() && nameL in existingNames) ||
+                (emailL.isNotEmpty() && emailL in existingEmails)
+            }
+            if (!isDup) {
+                viewModel.insertNow(card)
+                count++
+                // Update local sets so later entries in the same import don't re-insert duplicates.
+                exactKeys.add("$nameL|$emailL")
+                if (nameL.isNotEmpty()) existingNames.add(nameL)
+                if (emailL.isNotEmpty()) existingEmails.add(emailL)
+            }
         }
         return count
     }

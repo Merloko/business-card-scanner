@@ -48,7 +48,7 @@ object CsvUtils {
                 "job title", "title", "position", "jobtitle", "role" -> "jobTitle"
                 "business phone", "phone", "telephone", "work phone", "tel", "phone number" -> "phone"
                 "mobile phone", "mobile", "cell", "cell phone", "cellular", "mobile number" -> "mobile"
-                "email", "email address", "mail" -> "email"
+                "email", "email address", "mail", "e mail", "e mail address" -> "email"
                 "web page", "website", "url", "web", "homepage", "website url" -> "website"
                 "business street", "address", "street address", "street", "full address" -> "address"
                 "notes", "note", "comments", "comment", "memo" -> "notes"

@@ -41,6 +41,7 @@ import com.businesscard.scanner.R
 import com.businesscard.scanner.data.BusinessCard
 import com.businesscard.scanner.data.InteractionLog
 import com.businesscard.scanner.databinding.ActivityContactDetailBinding
+import com.businesscard.scanner.ocr.TextParser
 import com.businesscard.scanner.util.VCardUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -88,6 +89,16 @@ class ContactDetailActivity : AppCompatActivity() {
         binding.btnAddInteraction.setOnClickListener { showAddInteractionDialog() }
         binding.btnSetReminder.setOnClickListener { card?.let { checkAndShowReminderPicker(it) } }
         binding.btnRecordMeeting.setOnClickListener { checkAndOpenMeetingRecorder() }
+        binding.btnToggleParseDebug.setOnClickListener {
+            val expanded = binding.textParseDebug.visibility == View.VISIBLE
+            if (!expanded) {
+                card?.let { binding.textParseDebug.text = TextParser.debugParse(it.rawTextFront, it.rawTextBack) }
+            }
+            binding.textParseDebug.visibility = if (expanded) View.GONE else View.VISIBLE
+            binding.btnToggleParseDebug.text = getString(
+                if (expanded) R.string.parser_debug_show else R.string.parser_debug_hide
+            )
+        }
     }
 
     override fun onResume() {
@@ -161,11 +172,11 @@ class ContactDetailActivity : AppCompatActivity() {
         // startActivity is guarded against ActivityNotFoundException on devices without a handler.
         binding.textPhone.setOnClickListener {
             safeLaunch(Intent(Intent.ACTION_DIAL,
-                Uri.parse("tel:${VCardUtils.dialable(card.phone.lines().firstOrNull().orEmpty())}")))
+                Uri.parse("tel:${VCardUtils.dialable(card.phone.lines().firstOrNull { it.isNotBlank() }.orEmpty())}")))
         }
         binding.textMobile.setOnClickListener {
             safeLaunch(Intent(Intent.ACTION_DIAL,
-                Uri.parse("tel:${VCardUtils.dialable(card.mobile.lines().firstOrNull().orEmpty())}")))
+                Uri.parse("tel:${VCardUtils.dialable(card.mobile.lines().firstOrNull { it.isNotBlank() }.orEmpty())}")))
         }
         binding.textEmail.setOnClickListener {
             safeLaunch(Intent(Intent.ACTION_SENDTO,
@@ -193,8 +204,10 @@ class ContactDetailActivity : AppCompatActivity() {
                 if (card.rawTextBack.isNotBlank()) append("--- Back ---\n${card.rawTextBack}")
             }
             binding.rawOcrSection.visibility = View.VISIBLE
+            binding.parseDebugSection.visibility = View.VISIBLE
         } else {
             binding.rawOcrSection.visibility = View.GONE
+            binding.parseDebugSection.visibility = View.GONE
         }
     }
 
@@ -487,12 +500,14 @@ class ContactDetailActivity : AppCompatActivity() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val alarmManager = getSystemService(AlarmManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
+        val exactGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
+        if (exactGranted) {
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMs, pending)
         } else {
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMs, pending)
         }
-        Toast.makeText(this, getString(R.string.reminder_set), Toast.LENGTH_SHORT).show()
+        val msg = if (exactGranted) R.string.reminder_set else R.string.reminder_set_inexact
+        Toast.makeText(this, getString(msg), Toast.LENGTH_LONG).show()
     }
 
     override fun onSupportNavigateUp(): Boolean {

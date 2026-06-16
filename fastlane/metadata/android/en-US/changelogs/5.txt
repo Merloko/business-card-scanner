@@ -1,0 +1,5 @@
+• Added parser debug panel — tap ▶ Parser Debug on any contact to see how each OCR line was classified
+• Raw OCR text is now selectable and copyable for manual correction
+• Backup upgraded to ZIP format — now includes scanned card photos alongside contact data and raw OCR text
+• Old JSON backups still restore correctly
+• Debug APK from CI now works on any device architecture (universal APK)

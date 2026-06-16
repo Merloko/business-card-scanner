@@ -37,6 +37,35 @@ class CsvUtilsTest {
         assertEquals(listOf("a", ""), CsvUtils.parseCsvLine("a,"))
     }
 
+    // ──── parseCsvRows ────
+
+    @Test fun `parseCsvRows splits simple rows`() {
+        val rows = CsvUtils.parseCsvRows("a,b\nc,d\n")
+        assertEquals(listOf(listOf("a", "b"), listOf("c", "d")), rows)
+    }
+
+    @Test fun `parseCsvRows keeps embedded newline inside quoted field`() {
+        val rows = CsvUtils.parseCsvRows("name,notes\nJohn,\"line1\nline2\"\nJane,plain\n")
+        assertEquals(3, rows.size)
+        assertEquals(listOf("John", "line1\nline2"), rows[1])
+        assertEquals(listOf("Jane", "plain"), rows[2])
+    }
+
+    @Test fun `parseCsvRows handles CRLF line endings`() {
+        val rows = CsvUtils.parseCsvRows("a,b\r\nc,d\r\n")
+        assertEquals(listOf(listOf("a", "b"), listOf("c", "d")), rows)
+    }
+
+    @Test fun `parseCsvRows skips blank lines`() {
+        val rows = CsvUtils.parseCsvRows("a,b\n\nc,d\n")
+        assertEquals(listOf(listOf("a", "b"), listOf("c", "d")), rows)
+    }
+
+    @Test fun `parseCsvRows handles no trailing newline`() {
+        val rows = CsvUtils.parseCsvRows("a,b")
+        assertEquals(listOf(listOf("a", "b")), rows)
+    }
+
     // ──── mapCsvHeaders ────
 
     @Test fun `standard Outlook headers recognized`() {
@@ -95,6 +124,14 @@ class CsvUtilsTest {
 
     @Test fun `leading trailing whitespace trimmed`() {
         assertEquals(Pair("John", "Smith"), CsvUtils.splitName("  John  Smith  "))
+    }
+
+    @Test fun `CJK name kept intact with empty last name`() {
+        assertEquals(Pair("田中一郎", ""), CsvUtils.splitName("田中一郎"))
+    }
+
+    @Test fun `CJK name with space not split on whitespace`() {
+        assertEquals(Pair("田中 一郎", ""), CsvUtils.splitName("田中 一郎"))
     }
 
     // ──── csvField ────

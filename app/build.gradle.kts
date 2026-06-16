@@ -38,8 +38,7 @@ android {
         }
     } else {
         val requestedRelease = gradle.startParameter.taskNames.any { name ->
-            name.contains("release", ignoreCase = true) &&
-            (name.contains("assemble", ignoreCase = true) || name.contains("bundle", ignoreCase = true))
+            name.contains("release", ignoreCase = true)
         }
         if (requestedRelease) {
             throw GradleException(
@@ -71,7 +70,11 @@ android {
 
     splits {
         abi {
-            isEnable = true
+            // Enable ABI splits only for release builds; debug stays universal so
+            // CI artifacts install on any device or emulator architecture.
+            val isReleaseBuild = gradle.startParameter.taskNames
+                .any { it.contains("Release", ignoreCase = true) }
+            isEnable = isReleaseBuild
             reset()
             include("arm64-v8a")
             isUniversalApk = false

@@ -34,10 +34,14 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FilterInputStream
 import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 class MainActivity : AppCompatActivity() {
 
@@ -46,8 +50,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: BusinessCardAdapter
     private var actionMode: ActionMode? = null
 
-    private val pickJsonFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { restoreFromJson(it) }
+    companion object {
+        // Increment when the backup JSON schema changes; restoreFromBackup rejects backups
+        // with a higher version than this to prevent silent data corruption on older builds.
+        private const val BACKUP_VERSION = 2
+    }
+
+    private val pickBackupFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let { restoreFromBackup(it) }
     }
 
     // Use "*/*" so both "text/x-vcard" (legacy) and "text/vcard" (RFC 6350) files appear in the picker.
@@ -94,7 +104,7 @@ class MainActivity : AppCompatActivity() {
             onDeleteClick = { card -> viewModel.delete(card) },
             onLongPress = { startBatchMode() },
             onSelectionChanged = { ids ->
-                actionMode?.title = "${ids.size} selected"
+                actionMode?.title = getString(R.string.n_selected, ids.size)
                 if (ids.isEmpty() && adapter.selectionMode) {
                     actionMode?.finish()
                 }
@@ -112,9 +122,16 @@ class MainActivity : AppCompatActivity() {
                 val pos = vh.bindingAdapterPosition
                 if (pos == androidx.recyclerview.widget.RecyclerView.NO_POSITION) return
                 val card = adapter.currentList.getOrNull(pos) ?: return
-                viewModel.delete(card)
-                Snackbar.make(binding.root, "${card.personName.ifBlank { "Contact" }} deleted", Snackbar.LENGTH_LONG)
+                viewModel.deleteRowOnly(card)
+                Snackbar.make(binding.root, getString(R.string.contact_deleted, card.personName.ifBlank { getString(R.string.fallback_unknown_name) }), Snackbar.LENGTH_LONG)
                     .setAction(R.string.undo) { viewModel.insert(card) }
+                    .addCallback(object : Snackbar.Callback() {
+                        override fun onDismissed(snackbar: Snackbar, event: Int) {
+                            // Only delete the image files once Undo is no longer possible —
+                            // Undo re-inserts this same card object with these same paths.
+                            if (event != Snackbar.Callback.DISMISS_EVENT_ACTION) viewModel.cleanupImages(card)
+                        }
+                    })
                     .show()
             }
         }).attachToRecyclerView(binding.recyclerView)
@@ -181,7 +198,7 @@ class MainActivity : AppCompatActivity() {
         actionMode = startActionMode(object : ActionMode.Callback {
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 mode.menuInflater.inflate(R.menu.menu_batch, menu)
-                mode.title = "0 selected"
+                mode.title = getString(R.string.n_selected, 0)
                 return true
             }
             override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false
@@ -324,8 +341,8 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_export  -> { exportCsv(); true }
-            R.id.action_backup  -> { backupJson(); true }
-            R.id.action_restore -> { pickJsonFile.launch("application/json"); true }
+            R.id.action_backup  -> { backupZip(); true }
+            R.id.action_restore -> { pickBackupFile.launch("*/*"); true }
             R.id.action_about   -> { showAbout(); true }
             R.id.theme_system -> { setNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM); true }
             R.id.theme_light  -> { setNightMode(AppCompatDelegate.MODE_NIGHT_NO); true }
@@ -363,49 +380,84 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun backupJson() {
+    private fun backupZip() {
         lifecycleScope.launch {
             val cards = viewModel.getAllCardsList()
             if (cards.isEmpty()) {
                 Toast.makeText(this@MainActivity, getString(R.string.no_contacts_to_backup), Toast.LENGTH_SHORT).show()
                 return@launch
             }
-            val date = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
-            val json = withContext(Dispatchers.Default) {
-                JSONObject().apply {
-                    put("version", 1)
-                    put("exportDate", SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()))
-                    put("contacts", JSONArray().also { arr ->
+            // Capture once so filename and JSON exportDate always agree.
+            val now = Date()
+            val date = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(now)
+            val zipFile = File(cacheDir, "exports/bizcard_backup_$date.zip")
+            try {
+                withContext(Dispatchers.IO) {
+                    zipFile.parentFile?.mkdirs()
+                    ZipOutputStream(zipFile.outputStream().buffered()).use { zos ->
+                        // Map absolute image paths → unique relative entry names inside the ZIP.
+                        // Deduplicate basenames so two cards whose images share the same filename
+                        // don't produce a duplicate ZIP entry (which would silently overwrite on restore).
+                        val imageEntries = mutableMapOf<String, String>()
+                        val usedEntryNames = mutableSetOf<String>()
                         cards.forEach { card ->
-                            arr.put(JSONObject().apply {
-                                put("personName",    card.personName)
-                                put("companyName",   card.companyName)
-                                put("jobTitle",      card.jobTitle)
-                                put("phone",         card.phone)
-                                put("mobile",        card.mobile)
-                                put("email",         card.email)
-                                put("website",       card.website)
-                                put("address",       card.address)
-                                put("notes",         card.notes)
-                                put("tags",          card.tags)
-                                put("rawTextFront",  card.rawTextFront)
-                                put("rawTextBack",   card.rawTextBack)
-                                put("frontImagePath", "")
-                                put("backImagePath", "")
-                                put("createdAt",     card.createdAt)
-                            })
+                            for (imgPath in listOf(card.frontImagePath, card.backImagePath)) {
+                                if (imgPath.isNotBlank() && imgPath !in imageEntries) {
+                                    val imgFile = File(imgPath)
+                                    if (imgFile.exists()) {
+                                        var entryName = "images/${imgFile.name}"
+                                        var suffix = 0
+                                        while (entryName in usedEntryNames) {
+                                            suffix++
+                                            entryName = "images/${imgFile.nameWithoutExtension}_$suffix.${imgFile.extension}"
+                                        }
+                                        usedEntryNames.add(entryName)
+                                        imageEntries[imgPath] = entryName
+                                        zos.putNextEntry(ZipEntry(entryName))
+                                        imgFile.inputStream().use { it.copyTo(zos) }
+                                        zos.closeEntry()
+                                    }
+                                }
+                            }
                         }
-                    })
-                }.toString(2)
+                        // Embed JSON with relative image paths
+                        val json = JSONObject().apply {
+                            put("version", BACKUP_VERSION)
+                            put("exportDate", SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(now))
+                            put("contacts", JSONArray().also { arr ->
+                                cards.forEach { card ->
+                                    arr.put(JSONObject().apply {
+                                        put("personName",    card.personName)
+                                        put("companyName",   card.companyName)
+                                        put("jobTitle",      card.jobTitle)
+                                        put("phone",         card.phone)
+                                        put("mobile",        card.mobile)
+                                        put("email",         card.email)
+                                        put("website",       card.website)
+                                        put("address",       card.address)
+                                        put("notes",         card.notes)
+                                        put("tags",          card.tags)
+                                        put("rawTextFront",  card.rawTextFront)
+                                        put("rawTextBack",   card.rawTextBack)
+                                        put("frontImagePath", imageEntries[card.frontImagePath] ?: "")
+                                        put("backImagePath",  imageEntries[card.backImagePath] ?: "")
+                                        put("createdAt",     card.createdAt)
+                                    })
+                                }
+                            })
+                        }.toString(2)
+                        zos.putNextEntry(ZipEntry("backup.json"))
+                        zos.write(json.toByteArray(Charsets.UTF_8))
+                        zos.closeEntry()
+                    }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, getString(R.string.backup_failed, e.message), Toast.LENGTH_LONG).show()
+                return@launch
             }
-            val file = File(cacheDir, "exports/bizcard_backup_$date.json")
-            withContext(Dispatchers.IO) {
-                file.parentFile?.mkdirs()
-                file.writeText(json)
-            }
-            val uri = FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", file)
+            val uri = FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", zipFile)
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/json"
+                type = "application/zip"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 putExtra(Intent.EXTRA_SUBJECT, "Business Card Backup $date")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -418,50 +470,153 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun restoreFromJson(uri: Uri) {
+    private fun restoreFromBackup(uri: Uri) {
         lifecycleScope.launch {
             try {
-                val maxBytes = 10 * 1024 * 1024
-                val bytes = withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.use { it.readBytesWithLimit(maxBytes) }
-                } ?: throw Exception("Could not read file or backup exceeds 10 MB limit")
-                val text = bytes.toString(Charsets.UTF_8)
-                val root = JSONObject(text)
-                val arr = root.getJSONArray("contacts")
-                var count = 0
-                for (i in 0 until arr.length()) {
-                    val o = arr.getJSONObject(i)
-                    fun str(key: String) = if (o.has(key)) o.getString(key) else ""
-                    fun long(key: String) = if (o.has(key)) o.getLong(key) else System.currentTimeMillis()
-                    val card = BusinessCard(
-                        personName     = str("personName"),
-                        companyName    = str("companyName"),
-                        jobTitle       = str("jobTitle"),
-                        phone          = str("phone"),
-                        mobile         = str("mobile"),
-                        email          = str("email"),
-                        website        = str("website"),
-                        address        = str("address"),
-                        notes          = str("notes"),
-                        tags           = str("tags"),
-                        rawTextFront   = str("rawTextFront"),
-                        rawTextBack    = str("rawTextBack"),
-                        frontImagePath = str("frontImagePath"),
-                        backImagePath  = str("backImagePath"),
-                        createdAt      = long("createdAt")
-                    )
-                    // Use exact (AND) deduplication for bulk import to avoid blocking
-                    // different people who share only a name or only an email.
-                    val dup = viewModel.findExactDuplicate(card.personName, card.email)
-                        ?: if (card.personName.isBlank() || card.email.isBlank())
-                            viewModel.findDuplicate(card.personName, card.email) else null
-                    if (dup == null) { viewModel.insertNow(card); count++ }
+                val count = withContext(Dispatchers.IO) {
+                    // Open the content URI exactly once. BufferedInputStream.mark/reset allows
+                    // format detection without a second openInputStream call, which would fail
+                    // on single-read SAF URIs (e.g. some cloud storage providers).
+                    val stream = contentResolver.openInputStream(uri)?.buffered()
+                        ?: throw Exception("Could not open backup file")
+                    stream.use { s ->
+                        s.mark(2)
+                        val b0 = s.read()
+                        val b1 = s.read()
+                        val isZip = b0 == 0x50 && b1 == 0x4B
+                        s.reset()
+                        if (isZip) restoreFromZip(s) else restoreFromLegacyJson(s)
+                    }
                 }
                 Toast.makeText(this@MainActivity, getString(R.string.restored_contacts, count), Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, getString(R.string.restore_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private suspend fun restoreFromZip(stream: InputStream): Int {
+        val imageEntryToPath = mutableMapOf<String, String>()
+        var jsonBytes: ByteArray? = null
+        val filesCanonical = filesDir.canonicalPath + File.separator
+        var totalImageBytes = 0L
+        val imageByteLimit = 2L * 1024 * 1024 * 1024 // 2 GB total across all images
+
+        // Wrap in a non-closing delegate: ZipInputStream.close() would otherwise close
+        // the underlying stream, which the caller's own stream.use{} also closes —
+        // a double-close that throws on some cloud-backed SAF providers.
+        ZipInputStream(object : FilterInputStream(stream) { override fun close() {} }).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                if (!entry.isDirectory) {
+                    when {
+                        entry.name.startsWith("images/") -> {
+                            val imageName = entry.name.removePrefix("images/")
+                            val dest = File(filesDir, imageName)
+                            // Path-traversal guard: reject any entry that escapes filesDir.
+                            if (dest.canonicalPath.startsWith(filesCanonical)) {
+                                dest.parentFile?.mkdirs()
+                                dest.outputStream().use { out ->
+                                    val buf = ByteArray(8192)
+                                    var n: Int
+                                    while (zis.read(buf).also { n = it } != -1) {
+                                        totalImageBytes += n
+                                        if (totalImageBytes > imageByteLimit) {
+                                            throw Exception("Backup images exceed 2 GB limit")
+                                        }
+                                        out.write(buf, 0, n)
+                                    }
+                                }
+                                imageEntryToPath[entry.name] = dest.absolutePath
+                            }
+                        }
+                        entry.name == "backup.json" -> {
+                            jsonBytes = zis.readBytesWithLimit(50 * 1024 * 1024)
+                                ?: throw Exception("backup.json exceeds 50 MB limit")
+                        }
+                    }
+                }
+                zis.closeEntry()
+                entry = zis.nextEntry
+            }
+        }
+        val text = jsonBytes?.toString(Charsets.UTF_8)
+            ?: throw Exception("backup.json not found in archive")
+        return parseAndInsertCards(text, imageEntryToPath)
+    }
+
+    private suspend fun restoreFromLegacyJson(stream: InputStream): Int {
+        val bytes = stream.readBytesWithLimit(10 * 1024 * 1024)
+            ?: throw Exception("Could not read file or backup exceeds 10 MB limit")
+        return parseAndInsertCards(bytes.toString(Charsets.UTF_8), emptyMap())
+    }
+
+    private suspend fun parseAndInsertCards(
+        jsonText: String,
+        imageEntryToPath: Map<String, String>
+    ): Int {
+        val root = JSONObject(jsonText)
+        // Forward-compatibility guard: refuse backups from newer app versions that may
+        // have an incompatible schema, rather than silently importing garbled data.
+        val version = if (root.has("version")) root.getInt("version") else 1
+        if (version > BACKUP_VERSION) {
+            throw Exception("Backup was created by a newer version of the app (v$version). Please update the app to restore this backup.")
+        }
+        val arr = root.getJSONArray("contacts")
+
+        // Pre-load existing records once to avoid N×2 Room round-trips inside the import loop.
+        val existing = viewModel.getAllCardsList()
+        val exactKeys = existing
+            .map { "${it.personName.trim().lowercase()}|${it.email.trim().lowercase()}" }
+            .toHashSet()
+        val existingNames  = existing.mapTo(HashSet()) { it.personName.trim().lowercase() }.also { it.remove("") }
+        val existingEmails = existing.mapTo(HashSet()) { it.email.trim().lowercase() }.also { it.remove("") }
+
+        var count = 0
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            fun str(key: String) = o.optString(key, "")
+            fun long(key: String) = if (o.has(key)) o.getLong(key) else System.currentTimeMillis()
+            val frontRel = str("frontImagePath")
+            val backRel  = str("backImagePath")
+            val card = BusinessCard(
+                personName     = str("personName"),
+                companyName    = str("companyName"),
+                jobTitle       = str("jobTitle"),
+                phone          = str("phone"),
+                mobile         = str("mobile"),
+                email          = str("email"),
+                website        = str("website"),
+                address        = str("address"),
+                notes          = str("notes"),
+                tags           = str("tags"),
+                rawTextFront   = str("rawTextFront"),
+                rawTextBack    = str("rawTextBack"),
+                frontImagePath = imageEntryToPath[frontRel] ?: "",
+                backImagePath  = imageEntryToPath[backRel]  ?: "",
+                createdAt      = long("createdAt")
+            )
+            val nameL  = card.personName.trim().lowercase()
+            val emailL = card.email.trim().lowercase()
+            // AND-logic dedup: exact match on both fields; fall back to single-field when one is blank.
+            // When both are blank there's no signal to compare on, so the card is always
+            // treated as new (matches findExactDuplicate's contract, which never matches
+            // a blank/blank pair) rather than collapsing every blank contact into one.
+            val isDup = when {
+                nameL.isNotEmpty() && emailL.isNotEmpty() -> "$nameL|$emailL" in exactKeys
+                else -> (nameL.isNotEmpty() && nameL in existingNames) ||
+                        (emailL.isNotEmpty() && emailL in existingEmails)
+            }
+            if (!isDup) {
+                viewModel.insertNow(card)
+                count++
+                // Update local sets so later entries in the same import don't re-insert duplicates.
+                exactKeys.add("$nameL|$emailL")
+                if (nameL.isNotEmpty()) existingNames.add(nameL)
+                if (emailL.isNotEmpty()) existingEmails.add(emailL)
+            }
+        }
+        return count
     }
 
     private fun importVCard(uri: Uri) {
@@ -500,10 +655,10 @@ class MainActivity : AppCompatActivity() {
                         ?: throw Exception("Could not read file or file exceeds 5 MB limit")
                 }.toString(Charsets.UTF_8)
 
-                val lines = text.lines().filter { it.isNotBlank() }
-                if (lines.isEmpty()) throw Exception("File is empty")
+                val csvRows = CsvUtils.parseCsvRows(text)
+                if (csvRows.isEmpty()) throw Exception("File is empty")
 
-                val headers = CsvUtils.parseCsvLine(lines[0])
+                val headers = csvRows[0]
                 val colMap = CsvUtils.mapCsvHeaders(headers)
                 if (colMap.isEmpty()) {
                     Toast.makeText(this@MainActivity, getString(R.string.import_csv_no_columns), Toast.LENGTH_LONG).show()
@@ -513,8 +668,8 @@ class MainActivity : AppCompatActivity() {
                 fun cell(row: List<String>, key: String) = colMap[key]?.let { row.getOrNull(it)?.trim() }.orEmpty()
 
                 var imported = 0
-                for (i in 1 until lines.size) {
-                    val row = CsvUtils.parseCsvLine(lines[i])
+                for (i in 1 until csvRows.size) {
+                    val row = csvRows[i]
                     if (row.all { it.isBlank() }) continue
 
                     val firstName = cell(row, "firstName")

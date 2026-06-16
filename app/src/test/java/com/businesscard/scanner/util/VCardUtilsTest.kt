@@ -34,8 +34,8 @@ class VCardUtilsTest {
         assertEquals("ab", VCardUtils.vcfEscape("a\rb"))
     }
 
-    @Test fun `LF replaced with space`() {
-        assertEquals("a b", VCardUtils.vcfEscape("a\nb"))
+    @Test fun `LF encoded as backslash-n escape sequence`() {
+        assertEquals("a\\nb", VCardUtils.vcfEscape("a\nb"))
     }
 
     @Test fun `empty string unchanged`() {
@@ -124,5 +124,12 @@ class VCardUtilsTest {
     @Test fun `CJK name stays intact as last name in N field`() {
         val vcard = VCardUtils.buildVCardText(card(name = "张三丰"))
         assertTrue(vcard.contains("N:张三丰;;"))
+    }
+
+    @Test fun `newline in notes encoded as backslash-n escape on export`() {
+        // vcfEscape converts \n → \\n; symmetric with VCardParser which expands \n back
+        val vcard = VCardUtils.buildVCardText(card(notes = "line one\nline two"))
+        val noteLine = vcard.lines().first { it.startsWith("NOTE:") }
+        assertEquals("NOTE:line one\\nline two", noteLine)
     }
 }

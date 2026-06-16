@@ -78,7 +78,8 @@
                 android:layout_height="wrap_content"
                 android:padding="8dp"
                 android:textColor="@color/scan_ocr_text"
-                android:textSize="11sp" />
+                android:textSize="11sp"
+                android:textIsSelectable="true" />
         </ScrollView>
 
         <ProgressBar

@@ -89,6 +89,13 @@ class ContactDetailActivity : AppCompatActivity() {
         binding.btnAddInteraction.setOnClickListener { showAddInteractionDialog() }
         binding.btnSetReminder.setOnClickListener { card?.let { checkAndShowReminderPicker(it) } }
         binding.btnRecordMeeting.setOnClickListener { checkAndOpenMeetingRecorder() }
+        binding.btnToggleParseDebug.setOnClickListener {
+            val expanded = binding.textParseDebug.visibility == View.VISIBLE
+            binding.textParseDebug.visibility = if (expanded) View.GONE else View.VISIBLE
+            binding.btnToggleParseDebug.text = getString(
+                if (expanded) R.string.parser_debug_show else R.string.parser_debug_hide
+            )
+        }
     }
 
     override fun onResume() {
@@ -197,13 +204,6 @@ class ContactDetailActivity : AppCompatActivity() {
 
             binding.textParseDebug.text = TextParser.debugParse(card.rawTextFront, card.rawTextBack)
             binding.parseDebugSection.visibility = View.VISIBLE
-            binding.btnToggleParseDebug.setOnClickListener {
-                val expanded = binding.textParseDebug.visibility == View.VISIBLE
-                binding.textParseDebug.visibility = if (expanded) View.GONE else View.VISIBLE
-                binding.btnToggleParseDebug.text = getString(
-                    if (expanded) R.string.parser_debug_show else R.string.parser_debug_hide
-                )
-            }
         } else {
             binding.rawOcrSection.visibility = View.GONE
             binding.parseDebugSection.visibility = View.GONE

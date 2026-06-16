@@ -75,7 +75,7 @@ object TextParser {
         val address = extractAddress(lines)
         sb.appendLine("Address: ${address.ifBlank { "(none)" }}")
 
-        val jobTitle = extractJobTitle(lines)
+        val jobTitle = extractJobTitle(lines, address)
         sb.appendLine("Job title: ${jobTitle.ifBlank { "(none)" }}")
 
         val allPhones = (phone.lines() + mobile.lines()).filter { it.isNotBlank() }
@@ -107,7 +107,7 @@ object TextParser {
         val (phone, mobile) = extractPhones(allText)
         val website = extractWebsite(allText, email)
         val address = extractAddress(lines)
-        val jobTitle = extractJobTitle(lines)
+        val jobTitle = extractJobTitle(lines, address)
         val allPhones = (phone.lines() + mobile.lines()).filter { it.isNotBlank() }
         val (personName, companyName) = extractNameAndCompany(lines, email, allPhones, website, jobTitle, address)
 
@@ -180,7 +180,7 @@ object TextParser {
     }
 
     // Accepts 7-8 digits (local AU), 10 (AU with area code / mobile), 11 (+61...), 12-15 (other international)
-    private fun isValidPhoneDigitCount(count: Int) = count in 7..8 || count in 10..15
+    private fun isValidPhoneDigitCount(count: Int) = count in 7..15
 
     // Australian mobile: local 04xx or international +614xx
     private fun isMobile(number: String): Boolean {
@@ -221,8 +221,9 @@ object TextParser {
         return ""
     }
 
-    private fun extractJobTitle(lines: List<String>): String {
+    private fun extractJobTitle(lines: List<String>, addressLine: String = ""): String {
         for (line in lines) {
+            if (addressLine.isNotBlank() && line == addressLine) continue
             val lower = line.lowercase()
             if (JOB_TITLE_KEYWORDS.any { lower.contains(it) } && line.length < 60) {
                 return line
@@ -274,7 +275,7 @@ object TextParser {
         // CJK names: checked first so the word-count guard below doesn't block names whose
         // characters OCR split into individual tokens (e.g. "张 三 李 四" → 4 words).
         val cjkCount = trimmed.count { CjkUtils.isCjk(it) }
-        if (cjkCount in 2..6 && trimmed.all { it == ' ' || CjkUtils.isCjk(it) }) return true
+        if (cjkCount in 1..6 && trimmed.all { it == ' ' || CjkUtils.isCjk(it) }) return true
         // Latin/mixed names: 1–4 capitalised words
         val words = trimmed.split(WHITESPACE)
         if (words.size !in 1..4) return false

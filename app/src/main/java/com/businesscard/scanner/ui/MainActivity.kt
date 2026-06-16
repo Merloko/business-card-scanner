@@ -34,6 +34,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FilterInputStream
 import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -494,7 +495,10 @@ class MainActivity : AppCompatActivity() {
         var totalImageBytes = 0L
         val imageByteLimit = 2L * 1024 * 1024 * 1024 // 2 GB total across all images
 
-        ZipInputStream(stream).use { zis ->
+        // Wrap in a non-closing delegate: ZipInputStream.close() would otherwise close
+        // the underlying stream, which the caller's own stream.use{} also closes —
+        // a double-close that throws on some cloud-backed SAF providers.
+        ZipInputStream(object : FilterInputStream(stream) { override fun close() {} }).use { zis ->
             var entry = zis.nextEntry
             while (entry != null) {
                 if (!entry.isDirectory) {
@@ -564,7 +568,7 @@ class MainActivity : AppCompatActivity() {
         var count = 0
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
-            fun str(key: String) = if (o.has(key)) o.getString(key) else ""
+            fun str(key: String) = o.optString(key, "")
             fun long(key: String) = if (o.has(key)) o.getLong(key) else System.currentTimeMillis()
             val frontRel = str("frontImagePath")
             val backRel  = str("backImagePath")
@@ -588,11 +592,13 @@ class MainActivity : AppCompatActivity() {
             val nameL  = card.personName.trim().lowercase()
             val emailL = card.email.trim().lowercase()
             // AND-logic dedup: exact match on both fields; fall back to single-field when one is blank.
-            val isDup = if (nameL.isNotEmpty() && emailL.isNotEmpty()) {
-                "$nameL|$emailL" in exactKeys
-            } else {
-                (nameL.isNotEmpty() && nameL in existingNames) ||
-                (emailL.isNotEmpty() && emailL in existingEmails)
+            // Blank-name/blank-email cards still need an exact-key check, otherwise every
+            // such card is unconditionally treated as new on every restore.
+            val isDup = when {
+                nameL.isNotEmpty() && emailL.isNotEmpty() -> "$nameL|$emailL" in exactKeys
+                nameL.isEmpty() && emailL.isEmpty() -> "|" in exactKeys
+                else -> (nameL.isNotEmpty() && nameL in existingNames) ||
+                        (emailL.isNotEmpty() && emailL in existingEmails)
             }
             if (!isDup) {
                 viewModel.insertNow(card)
@@ -642,10 +648,10 @@ class MainActivity : AppCompatActivity() {
                         ?: throw Exception("Could not read file or file exceeds 5 MB limit")
                 }.toString(Charsets.UTF_8)
 
-                val lines = text.lines().filter { it.isNotBlank() }
-                if (lines.isEmpty()) throw Exception("File is empty")
+                val csvRows = CsvUtils.parseCsvRows(text)
+                if (csvRows.isEmpty()) throw Exception("File is empty")
 
-                val headers = CsvUtils.parseCsvLine(lines[0])
+                val headers = csvRows[0]
                 val colMap = CsvUtils.mapCsvHeaders(headers)
                 if (colMap.isEmpty()) {
                     Toast.makeText(this@MainActivity, getString(R.string.import_csv_no_columns), Toast.LENGTH_LONG).show()
@@ -655,8 +661,8 @@ class MainActivity : AppCompatActivity() {
                 fun cell(row: List<String>, key: String) = colMap[key]?.let { row.getOrNull(it)?.trim() }.orEmpty()
 
                 var imported = 0
-                for (i in 1 until lines.size) {
-                    val row = CsvUtils.parseCsvLine(lines[i])
+                for (i in 1 until csvRows.size) {
+                    val row = csvRows[i]
                     if (row.all { it.isBlank() }) continue
 
                     val firstName = cell(row, "firstName")

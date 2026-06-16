@@ -31,6 +31,42 @@ object CsvUtils {
         return fields
     }
 
+    // Parses an entire CSV document into rows, honoring quoted fields that contain
+    // embedded newlines (e.g. an Outlook-exported Notes column). Unlike calling
+    // parseCsvLine() per pre-split line, this tracks quote state across line breaks.
+    fun parseCsvRows(text: String): List<List<String>> {
+        val rows = mutableListOf<List<String>>()
+        val fields = mutableListOf<String>()
+        val sb = StringBuilder()
+        var inQuotes = false
+        var i = 0
+        fun endField() { fields.add(sb.toString()); sb.clear() }
+        fun endRow() {
+            endField()
+            if (fields.size > 1 || fields[0].isNotEmpty()) rows.add(fields.toList())
+            fields.clear()
+        }
+        while (i < text.length) {
+            val c = text[i]
+            when {
+                c == '"' && !inQuotes -> inQuotes = true
+                c == '"' && inQuotes && i + 1 < text.length && text[i + 1] == '"' -> {
+                    sb.append('"'); i++
+                }
+                c == '"' && inQuotes -> inQuotes = false
+                c == ',' && !inQuotes -> endField()
+                !inQuotes && (c == '\r' || c == '\n') -> {
+                    endRow()
+                    if (c == '\r' && i + 1 < text.length && text[i + 1] == '\n') i++
+                }
+                else -> sb.append(c)
+            }
+            i++
+        }
+        if (sb.isNotEmpty() || fields.isNotEmpty()) endRow()
+        return rows
+    }
+
     fun mapCsvHeaders(headers: List<String>): Map<String, Int> {
         val map = mutableMapOf<String, Int>()
         headers.forEachIndexed { i, h ->
@@ -76,17 +112,18 @@ object CsvUtils {
             "Business Phone", "Mobile Phone", "E-mail Address", "Web Page", "Business Street",
             "Notes", "Tags"
         )
+        // Collapse newlines so each contact stays on a single CSV row.
+        // parseCsvLine has no multi-line quoted-field awareness.
+        fun flat(s: String) = s.replace('\r', ' ').replace('\n', ' ')
         val rows = cards.map { card ->
             val (first, last) = splitName(card.personName)
             listOf(
-                first, last, card.companyName, card.jobTitle,
+                flat(first), flat(last), flat(card.companyName), flat(card.jobTitle),
                 card.phone.lines().firstOrNull { it.isNotBlank() }.orEmpty(),
                 card.mobile.lines().firstOrNull { it.isNotBlank() }.orEmpty(),
-                card.email, card.website, card.address,
-                // Collapse newlines so each contact stays on a single CSV row.
-                // parseCsvLine has no multi-line quoted-field awareness.
-                card.notes.replace('\n', ' ').replace('\r', ' '),
-                card.tags.replace('\n', ' ').replace('\r', ' ')
+                card.email, card.website, flat(card.address),
+                flat(card.notes),
+                flat(card.tags)
             )
         }
         return buildString {

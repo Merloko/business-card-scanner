@@ -1,0 +1,5 @@
+• Fixed: tag filter could mismatch contacts when the tag contained % or _ characters
+• Fixed: swiping to delete a contact could delete its photos even if you tapped Undo
+• Fixed: restoring a backup could merge unrelated contacts that had no name or email
+• Reduced unnecessary background work when viewing a contact's parser debug panel
+• "My Card" sharing now includes your address and notes in the shared vCard

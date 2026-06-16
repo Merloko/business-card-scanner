@@ -24,16 +24,24 @@ object VCardParser {
         var i = 0
 
         while (i < physicalLines.size) {
-            val firstLine = physicalLines[i]
+            var firstLine = physicalLines[i]
+            // Consume WSP-continuation lines if the current line has no colon yet
+            // (handles folding inside a long property key or parameter list).
+            while (firstLine.indexOf(':') < 0 && i + 1 < physicalLines.size) {
+                val next = physicalLines[i + 1]
+                if (next.isNotEmpty() && (next[0] == ' ' || next[0] == '\t')) {
+                    firstLine += next.substring(1); i++
+                } else break
+            }
             val colonIdx = firstLine.indexOf(':')
             if (colonIdx < 0) { i++; continue }
 
             val rawKey = firstLine.substring(0, colonIdx).uppercase().trim()
             val isQP = rawKey.contains("ENCODING=QUOTED-PRINTABLE") || rawKey.contains("ENCODING=QP")
-            val charsetName = if (rawKey.contains("CHARSET=")) {
-                rawKey.substringAfter("CHARSET=").substringBefore(";").substringBefore(":").trim()
-                    .takeIf { it.isNotEmpty() } ?: "UTF-8"
-            } else "UTF-8"
+            val charsetName = rawKey.split(";")
+                .firstOrNull { it.startsWith("CHARSET=") }
+                ?.removePrefix("CHARSET=")?.trim()
+                ?.takeIf { it.isNotEmpty() } ?: "UTF-8"
 
             val value: String
             if (isQP) {
@@ -81,9 +89,9 @@ object VCardParser {
 
         // Normalize display name: vCard \n sequences become real newlines after unescaping;
         // replace them with spaces so personName is always a single displayable line.
-        val name = fields.entries
-            .firstOrNull { (k, _) -> k == "FN" || k.startsWith("FN;") }
-            ?.value?.firstOrNull()?.let { unescapeVcf(it).replace('\n', ' ').replace('\r', ' ').trim() }
+        val name = (fields["FN"]?.firstOrNull()
+            ?: fields.entries.firstOrNull { (k, _) -> k.startsWith("FN;") }?.value?.firstOrNull())
+            ?.let { unescapeVcf(it).replace('\n', ' ').replace('\r', ' ').trim() }
             ?: fields.entries.firstOrNull { (k, _) -> k == "N" || k.startsWith("N;") }
                 ?.value?.firstOrNull()?.let { n ->
                     val parts = splitComponents(n)
@@ -193,7 +201,13 @@ object VCardParser {
         while (i < encoded.length) {
             when {
                 encoded[i] != '=' -> {
-                    bytes.add(encoded[i].code.and(0xFF).toByte()); i++
+                    val c = encoded[i]
+                    if (c.code < 128) {
+                        bytes.add(c.code.toByte())
+                    } else {
+                        c.toString().toByteArray(Charsets.UTF_8).forEach { bytes.add(it) }
+                    }
+                    i++
                 }
                 i + 1 >= encoded.length -> {
                     // Trailing bare '=' with nothing after — malformed, skip it

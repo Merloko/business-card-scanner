@@ -5,12 +5,22 @@ import com.businesscard.scanner.ocr.CjkUtils
 
 object VCardUtils {
 
+    private val WHITESPACE = Regex("\\s+")
+
+    // Escapes a TEXT-type vCard property value (names, titles, notes, addresses).
     fun vcfEscape(s: String) = s
         .replace("\\", "\\\\")
         .replace(";", "\\;")
         .replace(",", "\\,")
         .replace("\r", "")
-        .replace("\n", " ")
+        .replace("\n", "\\n")
+
+    // Escapes a URI-type vCard property value (URL field).
+    // RFC 6350 URI values must NOT have semicolons or commas escaped.
+    fun vcfEscapeUri(s: String) = s
+        .replace("\\", "\\\\")
+        .replace("\r", "")
+        .replace("\n", "\\n")
 
     fun dialable(number: String): String {
         val sb = StringBuilder()
@@ -25,7 +35,7 @@ object VCardUtils {
         appendLine("BEGIN:VCARD")
         appendLine("VERSION:3.0")
         appendLine("FN:${vcfEscape(card.personName)}")
-        val nameParts = card.personName.trim().split(Regex("\\s+"))
+        val nameParts = card.personName.trim().split(WHITESPACE)
         val (lastName, firstName) = when {
             CjkUtils.containsCjk(card.personName) -> Pair(card.personName, "")
             nameParts.size >= 2 -> Pair(nameParts.last(), nameParts.dropLast(1).joinToString(" "))
@@ -37,7 +47,7 @@ object VCardUtils {
         for (line in card.phone.lines()) if (line.isNotBlank()) appendLine("TEL;TYPE=WORK:${vcfEscape(line.trim())}")
         for (line in card.mobile.lines()) if (line.isNotBlank()) appendLine("TEL;TYPE=CELL:${vcfEscape(line.trim())}")
         if (card.email.isNotBlank()) appendLine("EMAIL:${vcfEscape(card.email)}")
-        if (card.website.isNotBlank()) appendLine("URL:${vcfEscape(card.website)}")
+        if (card.website.isNotBlank()) appendLine("URL:${vcfEscapeUri(card.website)}")
         if (card.address.isNotBlank()) appendLine("ADR;TYPE=WORK:;;${vcfEscape(card.address)};;;;")
         if (card.notes.isNotBlank()) appendLine("NOTE:${vcfEscape(card.notes)}")
         appendLine("END:VCARD")

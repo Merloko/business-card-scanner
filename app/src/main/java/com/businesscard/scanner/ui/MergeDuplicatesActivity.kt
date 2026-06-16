@@ -132,16 +132,20 @@ class MergeDuplicatesActivity : AppCompatActivity() {
                     if ((choiceMap[label] ?: 0) == 1) valB else valA
 
                 val merged = a.copy(
-                    personName  = pick("Name",    a.personName,  b.personName),
-                    companyName = pick("Company", a.companyName, b.companyName),
-                    jobTitle    = pick("Title",   a.jobTitle,    b.jobTitle),
-                    phone       = pick("Phone",   a.phone,       b.phone),
-                    mobile      = pick("Mobile",  a.mobile,      b.mobile),
-                    email       = pick("Email",   a.email,       b.email),
-                    website     = pick("Website", a.website,     b.website),
-                    address     = pick("Address", a.address,     b.address),
-                    notes       = pick("Notes",   a.notes,       b.notes),
-                    tags        = pick("Tags",    a.tags,        b.tags)
+                    personName     = pick("Name",    a.personName,  b.personName),
+                    companyName    = pick("Company", a.companyName, b.companyName),
+                    jobTitle       = pick("Title",   a.jobTitle,    b.jobTitle),
+                    phone          = pick("Phone",   a.phone,       b.phone),
+                    mobile         = pick("Mobile",  a.mobile,      b.mobile),
+                    email          = pick("Email",   a.email,       b.email),
+                    website        = pick("Website", a.website,     b.website),
+                    address        = pick("Address", a.address,     b.address),
+                    notes          = pick("Notes",   a.notes,       b.notes),
+                    tags           = pick("Tags",    a.tags,        b.tags),
+                    frontImagePath = a.frontImagePath.ifBlank { b.frontImagePath },
+                    backImagePath  = a.backImagePath.ifBlank { b.backImagePath },
+                    rawTextFront   = a.rawTextFront.ifBlank { b.rawTextFront },
+                    rawTextBack    = a.rawTextBack.ifBlank { b.rawTextBack }
                 )
                 lifecycleScope.launch {
                     viewModel.mergeNow(merged, b)

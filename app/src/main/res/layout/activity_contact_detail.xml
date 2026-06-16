@@ -221,7 +221,25 @@
                 <TextView android:id="@+id/textRawOcr"
                     android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:padding="8dp" android:textSize="11sp" android:fontFamily="monospace"
-                    android:background="@color/ocr_background"/>
+                    android:background="@color/ocr_background"
+                    android:textIsSelectable="true" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/parseDebugSection"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:visibility="gone">
+                <TextView android:id="@+id/btnToggleParseDebug"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="@string/parser_debug_show"
+                    android:textStyle="bold" android:padding="8dp"
+                    android:clickable="true" android:focusable="true"
+                    android:background="?attr/selectableItemBackground"/>
+                <TextView android:id="@+id/textParseDebug"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:padding="8dp" android:textSize="11sp" android:fontFamily="monospace"
+                    android:background="@color/ocr_background"
+                    android:textIsSelectable="true"
+                    android:visibility="gone"/>
             </LinearLayout>
 
             <com.google.android.material.card.MaterialCardView

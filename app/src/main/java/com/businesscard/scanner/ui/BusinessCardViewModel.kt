@@ -6,8 +6,11 @@ import com.businesscard.scanner.data.AppDatabase
 import com.businesscard.scanner.data.BusinessCard
 import com.businesscard.scanner.data.BusinessCardRepository
 import com.businesscard.scanner.data.InteractionLog
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.lifecycle.MediatorLiveData
+import java.io.File
 
 enum class SortOrder { NAME_ASC, COMPANY_ASC, DATE_NEWEST, DATE_OLDEST }
 
@@ -50,8 +53,8 @@ class BusinessCardViewModel(application: Application) : AndroidViewModel(applica
             val query = _searchQuery.value.orEmpty()
             val tag   = _tagFilter.value.orEmpty()
             val source = when {
-                tag.isNotBlank()   -> repository.getCardsByTag(tag)
-                query.isNotBlank() -> repository.search(query)
+                tag.isNotBlank()   -> repository.getCardsByTag(escapeLike(tag))
+                query.isNotBlank() -> repository.search(escapeLike(query))
                 else               -> repository.allCards
             }
             if (currentSource != source) {
@@ -66,6 +69,13 @@ class BusinessCardViewModel(application: Application) : AndroidViewModel(applica
         mediator.addSource(_tagFilter)   { refresh() }
         mediator.addSource(_sortOrder)   { refresh() }
     }
+
+    // Escapes SQL LIKE wildcard characters so a literal '%' or '_' typed by the user
+    // doesn't get interpreted as a wildcard (paired with ESCAPE '\' in BusinessCardDao.search).
+    private fun escapeLike(s: String) = s
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
 
     fun setSearchQuery(query: String) { _searchQuery.value = query }
     fun setTagFilter(tag: String)     { _tagFilter.value = tag }
@@ -91,10 +101,40 @@ class BusinessCardViewModel(application: Application) : AndroidViewModel(applica
     fun update(card: BusinessCard) = viewModelScope.launch { repository.update(card) }
     suspend fun updateNow(card: BusinessCard) = repository.update(card)
 
-    fun delete(card: BusinessCard) = viewModelScope.launch { repository.delete(card) }
-    suspend fun deleteNow(card: BusinessCard) = repository.delete(card)
+    fun delete(card: BusinessCard) = viewModelScope.launch { deleteNow(card) }
+    suspend fun deleteNow(card: BusinessCard) {
+        repository.delete(card)
+        deleteImageFiles(card.frontImagePath, card.backImagePath)
+    }
 
-    suspend fun mergeNow(updated: BusinessCard, toDelete: BusinessCard) = repository.mergeCards(updated, toDelete)
+    // Used by swipe-to-delete, which offers an Undo action: removes only the DB row so
+    // the UI updates immediately, but leaves the image files in place since Undo
+    // re-inserts the same card object pointing at those same paths. Call cleanupImages
+    // once the Undo window has passed (see MainActivity's Snackbar.Callback).
+    fun deleteRowOnly(card: BusinessCard) = viewModelScope.launch { repository.delete(card) }
+    fun cleanupImages(card: BusinessCard) = viewModelScope.launch {
+        deleteImageFiles(card.frontImagePath, card.backImagePath)
+    }
+
+    // toDelete's image paths may be the very files `updated` now points to (when the
+    // surviving card had no image of its own and reused the merged-away card's path),
+    // so only delete files that aren't still referenced by the merged result.
+    suspend fun mergeNow(updated: BusinessCard, toDelete: BusinessCard) {
+        repository.mergeCards(updated, toDelete)
+        withContext(Dispatchers.IO) {
+            if (toDelete.frontImagePath.isNotBlank() && toDelete.frontImagePath != updated.frontImagePath) {
+                File(toDelete.frontImagePath).delete()
+            }
+            if (toDelete.backImagePath.isNotBlank() && toDelete.backImagePath != updated.backImagePath) {
+                File(toDelete.backImagePath).delete()
+            }
+        }
+    }
+
+    private suspend fun deleteImageFiles(frontImagePath: String, backImagePath: String) = withContext(Dispatchers.IO) {
+        if (frontImagePath.isNotBlank()) File(frontImagePath).delete()
+        if (backImagePath.isNotBlank()) File(backImagePath).delete()
+    }
 
     suspend fun getAllCardsList() = repository.getAllCardsList()
 

@@ -25,6 +25,8 @@ class MeetingRecorderActivity : AppCompatActivity() {
     private val keyActions = mutableListOf<String>()
     private var cardId: Long = -1L
 
+    private val sentenceSplitPattern = Regex("[.!?\n]+")
+
     private val actionVerbRegex = Regex(
         "\\b(will|need to|should|must|going to|follow[- ]?up|action|call|send|email|meet|" +
         "schedule|book|arrange|confirm|check|review|prepare|finish|complete|deliver|provide|" +
@@ -133,7 +135,7 @@ class MeetingRecorderActivity : AppCompatActivity() {
     }
 
     private fun extractActions(text: String) {
-        text.split(Regex("[.!?\n]+"))
+        text.split(sentenceSplitPattern)
             .map { it.trim() }
             .filter { it.length > 10 && actionVerbRegex.containsMatchIn(it) && it !in keyActions }
             .forEach { keyActions.add(it) }
@@ -204,6 +206,10 @@ class MeetingRecorderActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // Stop first: onError's postDelayed retries check isRecording before calling
+        // listenOnce(), so this prevents a pending retry from firing after destroy and
+        // creating a new SpeechRecognizer against this now-dead activity.
+        isRecording = false
         speechRecognizer?.destroy()
         speechRecognizer = null
     }

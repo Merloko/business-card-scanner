@@ -1,0 +1,27 @@
+# F-Droid metadata — submit this file as a merge request to
+# https://gitlab.com/fdroid/fdroiddata adding it to metadata/
+
+Categories:
+  - Productivity
+
+License: LGPL-3.0-only
+
+Name: Business Card Scanner
+AutoName: Business Card Scanner
+
+AuthorName: Merloko
+SourceCode: https://github.com/merloko/business-card-scanner
+IssueTracker: https://github.com/merloko/business-card-scanner/issues
+
+Builds:
+  - versionName: '1.4.0'
+    versionCode: 5
+    commit: v1.4.0
+    subdir: app
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: '1.4.0'
+CurrentVersionCode: 5

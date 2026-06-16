@@ -52,6 +52,53 @@ object TextParser {
         "株式会社", "有限会社", "合同会社", "合資会社"
     )
 
+    /** Returns a human-readable breakdown of how each piece of the raw OCR text was classified. */
+    fun debugParse(frontText: String, backText: String = ""): String {
+        val allText = "$frontText\n$backText"
+        val lines = allText.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val sb = StringBuilder()
+
+        sb.appendLine("Lines (${lines.size}):")
+        lines.forEachIndexed { i, line -> sb.appendLine("  [$i] $line") }
+        sb.appendLine()
+
+        val email = extractEmail(allText)
+        sb.appendLine("Email: ${email.ifBlank { "(none)" }}")
+
+        val (phone, mobile) = extractPhones(allText)
+        sb.appendLine("Phone: ${phone.ifBlank { "(none)" }}")
+        sb.appendLine("Mobile: ${mobile.ifBlank { "(none)" }}")
+
+        val website = extractWebsite(allText, email)
+        sb.appendLine("Website: ${website.ifBlank { "(none)" }}")
+
+        val address = extractAddress(lines)
+        sb.appendLine("Address: ${address.ifBlank { "(none)" }}")
+
+        val jobTitle = extractJobTitle(lines, address)
+        sb.appendLine("Job title: ${jobTitle.ifBlank { "(none)" }}")
+
+        val allPhones = (phone.lines() + mobile.lines()).filter { it.isNotBlank() }
+        val (personName, companyName) = extractNameAndCompany(lines, email, allPhones, website, jobTitle, address)
+        sb.appendLine("Name: ${personName.ifBlank { "(none)" }}")
+        sb.appendLine("Company: ${companyName.ifBlank { "(none)" }}")
+        sb.appendLine()
+
+        val skipLines = (setOf(email, website, jobTitle, address) + allPhones).filter { it.isNotBlank() }
+        val candidates = lines.filter { line ->
+            skipLines.none { line.contains(it, ignoreCase = true) } &&
+            !line.matches(DIGIT_RUN_PATTERN) &&
+            line.length in 2..60
+        }
+        sb.appendLine("Name/company candidates (${candidates.size}):")
+        if (candidates.isEmpty()) sb.appendLine("  (all lines were skipped)")
+        candidates.forEach { sb.appendLine("  • $it") }
+        sb.appendLine()
+        sb.append("Skipped because matched phone/email/etc (${skipLines.size}): ${skipLines.joinToString(", ").ifBlank { "(none)" }}")
+
+        return sb.toString()
+    }
+
     fun parse(frontText: String, backText: String = ""): ParsedContact {
         val allText = "$frontText\n$backText"
         val lines = allText.lines().map { it.trim() }.filter { it.isNotBlank() }
@@ -60,7 +107,7 @@ object TextParser {
         val (phone, mobile) = extractPhones(allText)
         val website = extractWebsite(allText, email)
         val address = extractAddress(lines)
-        val jobTitle = extractJobTitle(lines)
+        val jobTitle = extractJobTitle(lines, address)
         val allPhones = (phone.lines() + mobile.lines()).filter { it.isNotBlank() }
         val (personName, companyName) = extractNameAndCompany(lines, email, allPhones, website, jobTitle, address)
 
@@ -112,12 +159,19 @@ object TextParser {
         return Pair(landlines.joinToString("\n"), mobiles.joinToString("\n"))
     }
 
+    private val DIGIT_RUN_PATTERN = Regex(""".*\d{3,}.*""")
+    private val WHITESPACE = Regex("\\s+")
+    private val ABN_PATTERN = Regex("""(?i)ABN\s*:?\s*\d[\d\s]{8,13}""")
+    private val ACN_PATTERN = Regex("""(?i)ACN\s*:?\s*\d[\d\s]{6,10}""")
+    private val BSB_PATTERN = Regex("""(?i)BSB\s*:?\s*\d[\d\s-]{5,9}""")
+    private val TFN_PATTERN = Regex("""(?i)TFN\s*:?\s*\d[\d\s]{6,10}""")
+
     // Erase ABN, ACN, BSB, TFN and similar AU business identifiers before phone matching
     private fun stripBusinessIdentifiers(text: String): String = text
-        .replace(Regex("""(?i)ABN\s*:?\s*\d[\d\s]{8,13}"""), "")
-        .replace(Regex("""(?i)ACN\s*:?\s*\d[\d\s]{6,10}"""), "")
-        .replace(Regex("""(?i)BSB\s*:?\s*\d[\d\s-]{5,9}"""), "")
-        .replace(Regex("""(?i)TFN\s*:?\s*\d[\d\s]{6,10}"""), "")
+        .replace(ABN_PATTERN, "")
+        .replace(ACN_PATTERN, "")
+        .replace(BSB_PATTERN, "")
+        .replace(TFN_PATTERN, "")
 
     // Strips trailing text annotations like "(AUS)", "(FAX)" after the last digit
     private fun trimToLastDigit(s: String): String {
@@ -126,7 +180,7 @@ object TextParser {
     }
 
     // Accepts 7-8 digits (local AU), 10 (AU with area code / mobile), 11 (+61...), 12-15 (other international)
-    private fun isValidPhoneDigitCount(count: Int) = count in 7..8 || count in 10..15
+    private fun isValidPhoneDigitCount(count: Int) = count in 7..15
 
     // Australian mobile: local 04xx or international +614xx
     private fun isMobile(number: String): Boolean {
@@ -167,8 +221,9 @@ object TextParser {
         return ""
     }
 
-    private fun extractJobTitle(lines: List<String>): String {
+    private fun extractJobTitle(lines: List<String>, addressLine: String = ""): String {
         for (line in lines) {
+            if (addressLine.isNotBlank() && line == addressLine) continue
             val lower = line.lowercase()
             if (JOB_TITLE_KEYWORDS.any { lower.contains(it) } && line.length < 60) {
                 return line
@@ -190,7 +245,7 @@ object TextParser {
 
         val candidates = lines.filter { line ->
             skipLines.none { line.contains(it, ignoreCase = true) } &&
-            !line.matches(Regex(""".*\d{3,}.*""")) &&
+            !line.matches(DIGIT_RUN_PATTERN) &&
             line.length in 2..60
         }
 
@@ -220,9 +275,9 @@ object TextParser {
         // CJK names: checked first so the word-count guard below doesn't block names whose
         // characters OCR split into individual tokens (e.g. "张 三 李 四" → 4 words).
         val cjkCount = trimmed.count { CjkUtils.isCjk(it) }
-        if (cjkCount in 2..6 && trimmed.all { it == ' ' || CjkUtils.isCjk(it) }) return true
+        if (cjkCount in 1..6 && trimmed.all { it == ' ' || CjkUtils.isCjk(it) }) return true
         // Latin/mixed names: 1–4 capitalised words
-        val words = trimmed.split(Regex("\\s+"))
+        val words = trimmed.split(WHITESPACE)
         if (words.size !in 1..4) return false
         return words.all { word ->
             // Strip trailing punctuation (e.g. "ANDRICH," → "ANDRICH")

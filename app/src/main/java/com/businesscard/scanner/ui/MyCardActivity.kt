@@ -21,8 +21,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.businesscard.scanner.R
+import com.businesscard.scanner.data.BusinessCard
 import com.businesscard.scanner.databinding.ActivityMyCardBinding
-import com.businesscard.scanner.ocr.CjkUtils
 import com.businesscard.scanner.util.VCardUtils
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -36,6 +36,7 @@ import java.io.File
 class MyCardActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMyCardBinding
+
     private val prefs by lazy { getSharedPreferences("my_card", MODE_PRIVATE) }
 
     private var nfcAdapter: NfcAdapter? = null
@@ -123,15 +124,21 @@ class MyCardActivity : AppCompatActivity() {
                 val ndef = Ndef.get(tag)
                 if (ndef != null) {
                     ndef.connect()
-                    if (!ndef.isWritable) throw Exception("Tag is read-only")
-                    if (ndef.maxSize < message.byteArrayLength) throw Exception("Tag capacity too small")
-                    ndef.writeNdefMessage(message)
-                    ndef.close()
+                    try {
+                        if (!ndef.isWritable) throw Exception("Tag is read-only")
+                        if (ndef.maxSize < message.byteArrayLength) throw Exception("Tag capacity too small")
+                        ndef.writeNdefMessage(message)
+                    } finally {
+                        ndef.close()
+                    }
                 } else {
                     val formatable = NdefFormatable.get(tag) ?: throw Exception("Tag not NDEF-compatible")
                     formatable.connect()
-                    formatable.format(message)
-                    formatable.close()
+                    try {
+                        formatable.format(message)
+                    } finally {
+                        formatable.close()
+                    }
                 }
                 withContext(Dispatchers.Main) {
                     nfcWritePending = false
@@ -139,6 +146,7 @@ class MyCardActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    nfcWritePending = false
                     Toast.makeText(this@MyCardActivity, getString(R.string.nfc_write_failed, e.message), Toast.LENGTH_SHORT).show()
                 }
             }
@@ -201,32 +209,17 @@ class MyCardActivity : AppCompatActivity() {
             .apply()
     }
 
-    private fun buildVCard(): String = buildString {
-        val name = binding.editName.text.toString().trim()
-        val company = binding.editCompany.text.toString().trim()
-        val title = binding.editTitle.text.toString().trim()
-        val phone = binding.editPhone.text.toString().trim()
-        val mobile = binding.editMobile.text.toString().trim()
-        val email = binding.editEmail.text.toString().trim()
-        val website = binding.editWebsite.text.toString().trim()
-        appendLine("BEGIN:VCARD")
-        appendLine("VERSION:3.0")
-        appendLine("FN:${VCardUtils.vcfEscape(name)}")
-        val parts = name.trim().split(Regex("\\s+"))
-        val (lastName, firstName) = when {
-            CjkUtils.containsCjk(name) -> Pair(name, "")
-            parts.size >= 2 -> Pair(parts.last(), parts.dropLast(1).joinToString(" "))
-            else -> Pair("", name)
-        }
-        appendLine("N:${VCardUtils.vcfEscape(lastName)};${VCardUtils.vcfEscape(firstName)};;;")
-        if (company.isNotBlank()) appendLine("ORG:${VCardUtils.vcfEscape(company)}")
-        if (title.isNotBlank()) appendLine("TITLE:${VCardUtils.vcfEscape(title)}")
-        if (phone.isNotBlank()) appendLine("TEL;TYPE=WORK:${VCardUtils.vcfEscape(phone)}")
-        if (mobile.isNotBlank()) appendLine("TEL;TYPE=CELL:${VCardUtils.vcfEscape(mobile)}")
-        if (email.isNotBlank()) appendLine("EMAIL:${VCardUtils.vcfEscape(email)}")
-        if (website.isNotBlank()) appendLine("URL:${VCardUtils.vcfEscape(website)}")
-        append("END:VCARD")
-    }
+    private fun buildVCard(): String = VCardUtils.buildVCardText(
+        BusinessCard(
+            personName = binding.editName.text.toString().trim(),
+            companyName = binding.editCompany.text.toString().trim(),
+            jobTitle = binding.editTitle.text.toString().trim(),
+            phone = binding.editPhone.text.toString().trim(),
+            mobile = binding.editMobile.text.toString().trim(),
+            email = binding.editEmail.text.toString().trim(),
+            website = binding.editWebsite.text.toString().trim()
+        )
+    )
 
     private suspend fun showQrCode() {
         val name = binding.editName.text.toString().trim()

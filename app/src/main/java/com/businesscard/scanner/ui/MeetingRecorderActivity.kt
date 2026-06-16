@@ -206,6 +206,10 @@ class MeetingRecorderActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // Stop first: onError's postDelayed retries check isRecording before calling
+        // listenOnce(), so this prevents a pending retry from firing after destroy and
+        // creating a new SpeechRecognizer against this now-dead activity.
+        isRecording = false
         speechRecognizer?.destroy()
         speechRecognizer = null
     }

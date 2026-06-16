@@ -48,7 +48,10 @@ interface BusinessCardDao {
         LIMIT 1""")
     suspend fun findExactDuplicate(name: String, email: String): BusinessCard?
 
-    @Query("SELECT * FROM business_cards WHERE ',' || tags || ',' LIKE '%,' || :tag || ',%' ORDER BY createdAt DESC")
+    // Caller must pre-escape literal '%', '_' and '\' in :tag (see
+    // BusinessCardViewModel.escapeLike) so user-typed wildcard characters are matched
+    // literally rather than as SQL wildcards.
+    @Query("SELECT * FROM business_cards WHERE ',' || tags || ',' LIKE '%,' || :tag || ',%' ESCAPE '\\' ORDER BY createdAt DESC")
     fun getCardsByTag(tag: String): LiveData<List<BusinessCard>>
 
     @Transaction

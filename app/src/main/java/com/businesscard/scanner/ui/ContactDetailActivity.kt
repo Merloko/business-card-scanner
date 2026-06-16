@@ -91,6 +91,9 @@ class ContactDetailActivity : AppCompatActivity() {
         binding.btnRecordMeeting.setOnClickListener { checkAndOpenMeetingRecorder() }
         binding.btnToggleParseDebug.setOnClickListener {
             val expanded = binding.textParseDebug.visibility == View.VISIBLE
+            if (!expanded) {
+                card?.let { binding.textParseDebug.text = TextParser.debugParse(it.rawTextFront, it.rawTextBack) }
+            }
             binding.textParseDebug.visibility = if (expanded) View.GONE else View.VISIBLE
             binding.btnToggleParseDebug.text = getString(
                 if (expanded) R.string.parser_debug_show else R.string.parser_debug_hide
@@ -201,8 +204,6 @@ class ContactDetailActivity : AppCompatActivity() {
                 if (card.rawTextBack.isNotBlank()) append("--- Back ---\n${card.rawTextBack}")
             }
             binding.rawOcrSection.visibility = View.VISIBLE
-
-            binding.textParseDebug.text = TextParser.debugParse(card.rawTextFront, card.rawTextBack)
             binding.parseDebugSection.visibility = View.VISIBLE
         } else {
             binding.rawOcrSection.visibility = View.GONE

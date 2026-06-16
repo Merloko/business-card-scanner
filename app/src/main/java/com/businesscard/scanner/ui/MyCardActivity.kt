@@ -21,8 +21,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.businesscard.scanner.R
+import com.businesscard.scanner.data.BusinessCard
 import com.businesscard.scanner.databinding.ActivityMyCardBinding
-import com.businesscard.scanner.ocr.CjkUtils
 import com.businesscard.scanner.util.VCardUtils
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -37,9 +37,6 @@ class MyCardActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMyCardBinding
 
-    companion object {
-        private val WHITESPACE = Regex("\\s+")
-    }
     private val prefs by lazy { getSharedPreferences("my_card", MODE_PRIVATE) }
 
     private var nfcAdapter: NfcAdapter? = null
@@ -212,32 +209,17 @@ class MyCardActivity : AppCompatActivity() {
             .apply()
     }
 
-    private fun buildVCard(): String = buildString {
-        val name = binding.editName.text.toString().trim()
-        val company = binding.editCompany.text.toString().trim()
-        val title = binding.editTitle.text.toString().trim()
-        val phone = binding.editPhone.text.toString().trim()
-        val mobile = binding.editMobile.text.toString().trim()
-        val email = binding.editEmail.text.toString().trim()
-        val website = binding.editWebsite.text.toString().trim()
-        appendLine("BEGIN:VCARD")
-        appendLine("VERSION:3.0")
-        appendLine("FN:${VCardUtils.vcfEscape(name)}")
-        val parts = name.trim().split(WHITESPACE)
-        val (lastName, firstName) = when {
-            CjkUtils.containsCjk(name) -> Pair(name, "")
-            parts.size >= 2 -> Pair(parts.last(), parts.dropLast(1).joinToString(" "))
-            else -> Pair("", name)
-        }
-        appendLine("N:${VCardUtils.vcfEscape(lastName)};${VCardUtils.vcfEscape(firstName)};;;")
-        if (company.isNotBlank()) appendLine("ORG:${VCardUtils.vcfEscape(company)}")
-        if (title.isNotBlank()) appendLine("TITLE:${VCardUtils.vcfEscape(title)}")
-        for (line in phone.lines()) if (line.isNotBlank()) appendLine("TEL;TYPE=WORK:${VCardUtils.vcfEscape(line.trim())}")
-        for (line in mobile.lines()) if (line.isNotBlank()) appendLine("TEL;TYPE=CELL:${VCardUtils.vcfEscape(line.trim())}")
-        if (email.isNotBlank()) appendLine("EMAIL:${VCardUtils.vcfEscape(email)}")
-        if (website.isNotBlank()) appendLine("URL:${VCardUtils.vcfEscapeUri(website)}")
-        append("END:VCARD")
-    }
+    private fun buildVCard(): String = VCardUtils.buildVCardText(
+        BusinessCard(
+            personName = binding.editName.text.toString().trim(),
+            companyName = binding.editCompany.text.toString().trim(),
+            jobTitle = binding.editTitle.text.toString().trim(),
+            phone = binding.editPhone.text.toString().trim(),
+            mobile = binding.editMobile.text.toString().trim(),
+            email = binding.editEmail.text.toString().trim(),
+            website = binding.editWebsite.text.toString().trim()
+        )
+    )
 
     private suspend fun showQrCode() {
         val name = binding.editName.text.toString().trim()

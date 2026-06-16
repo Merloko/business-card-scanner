@@ -6,7 +6,9 @@ import com.businesscard.scanner.data.AppDatabase
 import com.businesscard.scanner.data.BusinessCard
 import com.businesscard.scanner.data.BusinessCardRepository
 import com.businesscard.scanner.data.InteractionLog
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.lifecycle.MediatorLiveData
 import java.io.File
 
@@ -51,7 +53,7 @@ class BusinessCardViewModel(application: Application) : AndroidViewModel(applica
             val query = _searchQuery.value.orEmpty()
             val tag   = _tagFilter.value.orEmpty()
             val source = when {
-                tag.isNotBlank()   -> repository.getCardsByTag(tag)
+                tag.isNotBlank()   -> repository.getCardsByTag(escapeLike(tag))
                 query.isNotBlank() -> repository.search(escapeLike(query))
                 else               -> repository.allCards
             }
@@ -105,20 +107,31 @@ class BusinessCardViewModel(application: Application) : AndroidViewModel(applica
         deleteImageFiles(card.frontImagePath, card.backImagePath)
     }
 
+    // Used by swipe-to-delete, which offers an Undo action: removes only the DB row so
+    // the UI updates immediately, but leaves the image files in place since Undo
+    // re-inserts the same card object pointing at those same paths. Call cleanupImages
+    // once the Undo window has passed (see MainActivity's Snackbar.Callback).
+    fun deleteRowOnly(card: BusinessCard) = viewModelScope.launch { repository.delete(card) }
+    fun cleanupImages(card: BusinessCard) = viewModelScope.launch {
+        deleteImageFiles(card.frontImagePath, card.backImagePath)
+    }
+
     // toDelete's image paths may be the very files `updated` now points to (when the
     // surviving card had no image of its own and reused the merged-away card's path),
     // so only delete files that aren't still referenced by the merged result.
     suspend fun mergeNow(updated: BusinessCard, toDelete: BusinessCard) {
         repository.mergeCards(updated, toDelete)
-        if (toDelete.frontImagePath.isNotBlank() && toDelete.frontImagePath != updated.frontImagePath) {
-            File(toDelete.frontImagePath).delete()
-        }
-        if (toDelete.backImagePath.isNotBlank() && toDelete.backImagePath != updated.backImagePath) {
-            File(toDelete.backImagePath).delete()
+        withContext(Dispatchers.IO) {
+            if (toDelete.frontImagePath.isNotBlank() && toDelete.frontImagePath != updated.frontImagePath) {
+                File(toDelete.frontImagePath).delete()
+            }
+            if (toDelete.backImagePath.isNotBlank() && toDelete.backImagePath != updated.backImagePath) {
+                File(toDelete.backImagePath).delete()
+            }
         }
     }
 
-    private fun deleteImageFiles(frontImagePath: String, backImagePath: String) {
+    private suspend fun deleteImageFiles(frontImagePath: String, backImagePath: String) = withContext(Dispatchers.IO) {
         if (frontImagePath.isNotBlank()) File(frontImagePath).delete()
         if (backImagePath.isNotBlank()) File(backImagePath).delete()
     }

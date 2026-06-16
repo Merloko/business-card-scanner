@@ -122,9 +122,16 @@ class MainActivity : AppCompatActivity() {
                 val pos = vh.bindingAdapterPosition
                 if (pos == androidx.recyclerview.widget.RecyclerView.NO_POSITION) return
                 val card = adapter.currentList.getOrNull(pos) ?: return
-                viewModel.delete(card)
+                viewModel.deleteRowOnly(card)
                 Snackbar.make(binding.root, getString(R.string.contact_deleted, card.personName.ifBlank { getString(R.string.fallback_unknown_name) }), Snackbar.LENGTH_LONG)
                     .setAction(R.string.undo) { viewModel.insert(card) }
+                    .addCallback(object : Snackbar.Callback() {
+                        override fun onDismissed(snackbar: Snackbar, event: Int) {
+                            // Only delete the image files once Undo is no longer possible —
+                            // Undo re-inserts this same card object with these same paths.
+                            if (event != Snackbar.Callback.DISMISS_EVENT_ACTION) viewModel.cleanupImages(card)
+                        }
+                    })
                     .show()
             }
         }).attachToRecyclerView(binding.recyclerView)
@@ -592,11 +599,11 @@ class MainActivity : AppCompatActivity() {
             val nameL  = card.personName.trim().lowercase()
             val emailL = card.email.trim().lowercase()
             // AND-logic dedup: exact match on both fields; fall back to single-field when one is blank.
-            // Blank-name/blank-email cards still need an exact-key check, otherwise every
-            // such card is unconditionally treated as new on every restore.
+            // When both are blank there's no signal to compare on, so the card is always
+            // treated as new (matches findExactDuplicate's contract, which never matches
+            // a blank/blank pair) rather than collapsing every blank contact into one.
             val isDup = when {
                 nameL.isNotEmpty() && emailL.isNotEmpty() -> "$nameL|$emailL" in exactKeys
-                nameL.isEmpty() && emailL.isEmpty() -> "|" in exactKeys
                 else -> (nameL.isNotEmpty() && nameL in existingNames) ||
                         (emailL.isNotEmpty() && emailL in existingEmails)
             }

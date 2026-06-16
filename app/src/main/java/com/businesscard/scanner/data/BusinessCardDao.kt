@@ -24,8 +24,9 @@ interface BusinessCardDao {
     @Query("SELECT * FROM business_cards WHERE id = :id")
     suspend fun getCardById(id: Long): BusinessCard?
 
-    // Caller must pre-escape literal '%', '_' and '\' in :query (see VCardUtils/escapeLike)
-    // so user-typed wildcard characters are matched literally rather than as SQL wildcards.
+    // Caller must pre-escape literal '%', '_' and '\' in :query (see
+    // BusinessCardViewModel.escapeLike) so user-typed wildcard characters are matched
+    // literally rather than as SQL wildcards.
     @Query("""
         SELECT * FROM business_cards
         WHERE personName LIKE '%' || :query || '%' ESCAPE '\'

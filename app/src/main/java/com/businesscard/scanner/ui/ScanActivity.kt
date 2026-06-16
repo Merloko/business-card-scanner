@@ -229,6 +229,7 @@ class ScanActivity : AppCompatActivity() {
             return
         }
         if (isScanningBack) {
+            replacePreviousImage(backImagePath, imagePath)
             backImagePath = imagePath
             backText = text
             binding.textOcrResult.text = "Back:\n$text"
@@ -239,6 +240,7 @@ class ScanActivity : AppCompatActivity() {
             binding.btnGallery.visibility = View.GONE
             Toast.makeText(this, getString(R.string.back_scanned), Toast.LENGTH_SHORT).show()
         } else {
+            replacePreviousImage(frontImagePath, imagePath)
             frontImagePath = imagePath
             frontText = text
             binding.textOcrResult.text = "Front:\n$text"
@@ -248,6 +250,12 @@ class ScanActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.front_scanned), Toast.LENGTH_SHORT).show()
         }
         updateUI()
+    }
+
+    // A retake before saving overwrites frontImagePath/backImagePath, otherwise
+    // orphaning the previous capture's file on disk with nothing left to reference it.
+    private fun replacePreviousImage(oldPath: String, newPath: String) {
+        if (oldPath.isNotBlank() && oldPath != newPath) File(oldPath).delete()
     }
 
     private fun flipToBack() {

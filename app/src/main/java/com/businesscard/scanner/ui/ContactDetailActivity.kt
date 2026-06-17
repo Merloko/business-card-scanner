@@ -86,6 +86,10 @@ class ContactDetailActivity : AppCompatActivity() {
             displayLogs(logs)
         }
 
+        binding.btnAddInteraction.isEnabled = false
+        binding.btnSetReminder.isEnabled = false
+        binding.btnRecordMeeting.isEnabled = false
+
         binding.btnAddInteraction.setOnClickListener { showAddInteractionDialog() }
         binding.btnSetReminder.setOnClickListener { card?.let { checkAndShowReminderPicker(it) } }
         binding.btnRecordMeeting.setOnClickListener { checkAndOpenMeetingRecorder() }
@@ -110,7 +114,14 @@ class ContactDetailActivity : AppCompatActivity() {
     private fun loadCard(cardId: Long) {
         lifecycleScope.launch {
             card = viewModel.getCardById(cardId)
-            card?.let { displayCard(it) } ?: finish()
+            if (card != null) {
+                binding.btnAddInteraction.isEnabled = true
+                binding.btnSetReminder.isEnabled = true
+                binding.btnRecordMeeting.isEnabled = true
+                displayCard(card!!)
+            } else {
+                finish()
+            }
         }
     }
 

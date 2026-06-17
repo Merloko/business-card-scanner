@@ -160,6 +160,16 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <Button
+                android:id="@+id/btnDictateNote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="@string/btn_dictate_notes"
+                android:enabled="false"
+                app:icon="@drawable/ic_mic"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

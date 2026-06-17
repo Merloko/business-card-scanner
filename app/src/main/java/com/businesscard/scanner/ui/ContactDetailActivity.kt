@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.TimePickerDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.speech.RecognizerIntent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -72,6 +73,21 @@ class ContactDetailActivity : AppCompatActivity() {
         else Toast.makeText(this, getString(R.string.record_permission_denied), Toast.LENGTH_LONG).show()
     }
 
+    private val dictateNoteLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val words = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            ?: return@registerForActivityResult
+        val c = card ?: return@registerForActivityResult
+        val updated = c.copy(notes = if (c.notes.isBlank()) words else "${c.notes}\n$words")
+        lifecycleScope.launch {
+            viewModel.updateNow(updated)
+            card = updated
+            displayCard(updated)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityContactDetailBinding.inflate(layoutInflater)
@@ -86,10 +102,12 @@ class ContactDetailActivity : AppCompatActivity() {
             displayLogs(logs)
         }
 
+        binding.btnDictateNote.isEnabled = false
         binding.btnAddInteraction.isEnabled = false
         binding.btnSetReminder.isEnabled = false
         binding.btnRecordMeeting.isEnabled = false
 
+        binding.btnDictateNote.setOnClickListener { startDictateNote() }
         binding.btnAddInteraction.setOnClickListener { showAddInteractionDialog() }
         binding.btnSetReminder.setOnClickListener { card?.let { checkAndShowReminderPicker(it) } }
         binding.btnRecordMeeting.setOnClickListener { checkAndOpenMeetingRecorder() }
@@ -115,6 +133,7 @@ class ContactDetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             card = viewModel.getCardById(cardId)
             if (card != null) {
+                binding.btnDictateNote.isEnabled = true
                 binding.btnAddInteraction.isEnabled = true
                 binding.btnSetReminder.isEnabled = true
                 binding.btnRecordMeeting.isEnabled = true
@@ -462,6 +481,18 @@ class ContactDetailActivity : AppCompatActivity() {
     }
 
     private fun buildVCardText(card: BusinessCard) = VCardUtils.buildVCardText(card)
+
+    private fun startDictateNote() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, getString(R.string.speech_prompt))
+        }
+        try {
+            dictateNoteLauncher.launch(intent)
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(this, getString(R.string.speech_unavailable), Toast.LENGTH_SHORT).show()
+        }
+    }
 
     private fun checkAndOpenMeetingRecorder() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {

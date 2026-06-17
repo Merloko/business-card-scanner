@@ -31,6 +31,10 @@
         android:title="Export CSV"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_export_ocr_log"
+        android:title="Export OCR Log"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_backup"
         android:title="Backup (JSON)"
         app:showAsAction="never" />

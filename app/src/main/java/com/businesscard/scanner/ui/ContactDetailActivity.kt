@@ -80,7 +80,9 @@ class ContactDetailActivity : AppCompatActivity() {
         val words = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
             ?: return@registerForActivityResult
         val c = card ?: return@registerForActivityResult
-        val updated = c.copy(notes = if (c.notes.isBlank()) words else "${c.notes}\n$words")
+        val stamp = SimpleDateFormat("d MMM yyyy, h:mm a", Locale.getDefault()).format(Date())
+        val entry = "[$stamp] $words"
+        val updated = c.copy(notes = if (c.notes.isBlank()) entry else "${c.notes}\n$entry")
         lifecycleScope.launch {
             viewModel.updateNow(updated)
             card = updated

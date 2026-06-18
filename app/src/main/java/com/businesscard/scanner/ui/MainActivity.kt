@@ -371,7 +371,7 @@ class MainActivity : AppCompatActivity() {
                 "• Material Components — Apache 2.0"
             )
             .setPositiveButton(android.R.string.ok, null)
-            .setNeutralButton(R.string.about_view_source) { _, _ ->
+            .setNegativeButton(R.string.about_view_source) { _, _ ->
                 try {
                     startActivity(Intent(Intent.ACTION_VIEW,
                         Uri.parse("https://github.com/merloko/business-card-scanner")))
@@ -379,6 +379,7 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, getString(R.string.no_app_for_action), Toast.LENGTH_SHORT).show()
                 }
             }
+            .setNeutralButton("Export Debug") { _, _ -> exportDebugPackage() }
             .show()
     }
 
@@ -770,6 +771,84 @@ class MainActivity : AppCompatActivity() {
             }
             try {
                 startActivity(Intent.createChooser(intent, "Share OCR Log"))
+            } catch (e: ActivityNotFoundException) {
+                Toast.makeText(this@MainActivity, getString(R.string.no_app_for_action), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun exportDebugPackage() {
+        lifecycleScope.launch {
+            val cards = viewModel.getAllCardsList()
+                .filter { it.rawTextFront.isNotBlank() || it.rawTextBack.isNotBlank() }
+            if (cards.isEmpty()) {
+                Toast.makeText(this@MainActivity, "No cards with OCR data to export", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val dateFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+            val file = File(cacheDir, "exports/debug_package.zip")
+            withContext(Dispatchers.IO) {
+                file.parentFile?.mkdirs()
+                ZipOutputStream(file.outputStream().buffered()).use { zip ->
+                    // ocr_log.json
+                    val json = JSONArray().also { arr ->
+                        cards.forEach { card ->
+                            val parsed = TextParser.parse(card.rawTextFront, card.rawTextBack)
+                            arr.put(JSONObject().apply {
+                                put("id", card.id)
+                                put("createdAt", dateFmt.format(Date(card.createdAt)))
+                                put("saved", JSONObject().apply {
+                                    put("name",    card.personName)
+                                    put("company", card.companyName)
+                                    put("title",   card.jobTitle)
+                                    put("phone",   card.phone)
+                                    put("mobile",  card.mobile)
+                                    put("email",   card.email)
+                                    put("website", card.website)
+                                    put("address", card.address)
+                                })
+                                put("parser", JSONObject().apply {
+                                    put("name",    parsed.personName)
+                                    put("company", parsed.companyName)
+                                    put("title",   parsed.jobTitle)
+                                    put("phone",   parsed.phone)
+                                    put("mobile",  parsed.mobile)
+                                    put("email",   parsed.email)
+                                    put("website", parsed.website)
+                                    put("address", parsed.address)
+                                })
+                                put("rawFront", card.rawTextFront)
+                                put("rawBack",  card.rawTextBack)
+                            })
+                        }
+                    }.toString(2)
+                    zip.putNextEntry(ZipEntry("ocr_log.json"))
+                    zip.write(json.toByteArray())
+                    zip.closeEntry()
+                    // photos
+                    cards.forEach { card ->
+                        listOf("front" to card.frontImagePath, "back" to card.backImagePath)
+                            .filter { (_, path) -> path.isNotBlank() }
+                            .forEach { (side, path) ->
+                                val img = File(path)
+                                if (img.exists()) {
+                                    zip.putNextEntry(ZipEntry("photos/card_${card.id}_$side.jpg"))
+                                    img.inputStream().use { it.copyTo(zip) }
+                                    zip.closeEntry()
+                                }
+                            }
+                    }
+                }
+            }
+            val uri = FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/zip"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "Business Card Scanner Debug Package")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            try {
+                startActivity(Intent.createChooser(intent, "Share Debug Package"))
             } catch (e: ActivityNotFoundException) {
                 Toast.makeText(this@MainActivity, getString(R.string.no_app_for_action), Toast.LENGTH_SHORT).show()
             }

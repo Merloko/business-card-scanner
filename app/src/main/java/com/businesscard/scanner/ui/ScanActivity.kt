@@ -17,6 +17,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.camera.core.*
@@ -37,6 +39,8 @@ class ScanActivity : AppCompatActivity() {
     private lateinit var binding: ActivityScanBinding
     private val viewModel: BusinessCardViewModel by viewModels()
     private var imageCapture: ImageCapture? = null
+    private var camera: Camera? = null
+    private var scanMessageJob: Job? = null
 
     private var frontImagePath = ""
     private var backImagePath = ""
@@ -159,7 +163,7 @@ class ScanActivity : AppCompatActivity() {
                 .build()
             try {
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
+                camera = cameraProvider.bindToLifecycle(
                     this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture
                 )
             } catch (e: Exception) {
@@ -169,15 +173,30 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun captureImage() {
-        val imageCapture = imageCapture ?: return
+        val ic = imageCapture ?: return
         setBusy(true)
+        val cam = camera
+        val w = binding.viewFinder.width.toFloat()
+        val h = binding.viewFinder.height.toFloat()
+        if (cam != null && w > 0 && h > 0) {
+            val point = binding.viewFinder.meteringPointFactory.createPoint(w / 2f, h / 2f)
+            val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
+                .disableAutoCancel()
+                .build()
+            cam.cameraControl.startFocusAndMetering(action).addListener(
+                { doCapture(ic) },
+                ContextCompat.getMainExecutor(this)
+            )
+        } else {
+            doCapture(ic)
+        }
+    }
 
+    private fun doCapture(ic: ImageCapture) {
         val fileName = "card_${if (isScanningBack) "back" else "front"}_${System.currentTimeMillis()}.jpg"
         val file = File(filesDir, fileName)
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(file).build()
-
-        imageCapture.takePicture(
-            outputOptions,
+        ic.takePicture(
+            ImageCapture.OutputFileOptions.Builder(file).build(),
             ContextCompat.getMainExecutor(this),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
@@ -185,10 +204,24 @@ class ScanActivity : AppCompatActivity() {
                 }
                 override fun onError(exc: ImageCaptureException) {
                     setBusy(false)
-                    Toast.makeText(this@ScanActivity, getString(R.string.capture_failed, exc.message), Toast.LENGTH_SHORT).show()
+                    showScanMessage(getString(R.string.capture_failed, exc.message), long = true)
                 }
             }
         )
+    }
+
+    private fun showScanMessage(msg: String, long: Boolean = false) {
+        scanMessageJob?.cancel()
+        binding.textScanMessage.text = msg
+        binding.scanMessageCard.alpha = 1f
+        binding.scanMessageCard.visibility = View.VISIBLE
+        scanMessageJob = lifecycleScope.launch {
+            delay(if (long) 3500L else 2000L)
+            binding.scanMessageCard.animate()
+                .alpha(0f).setDuration(400)
+                .withEndAction { binding.scanMessageCard.visibility = View.GONE }
+                .start()
+        }
     }
 
     private fun runOcrFromUri(uri: Uri) {
@@ -207,7 +240,7 @@ class ScanActivity : AppCompatActivity() {
                 runOcr(destFile.absolutePath)
             } catch (e: Exception) {
                 setBusy(false)
-                Toast.makeText(this@ScanActivity, "Could not read image: ${e.message}", Toast.LENGTH_SHORT).show()
+                showScanMessage("Could not read image: ${e.message}", long = true)
             }
         }
     }
@@ -219,13 +252,13 @@ class ScanActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             setBusy(false)
-            Toast.makeText(this, getString(R.string.image_load_error, e.message), Toast.LENGTH_SHORT).show()
+            showScanMessage(getString(R.string.image_load_error, e.message), long = true)
             return
         }
         val text = ocrHelper.recognize(image)
         setBusy(false)
         if (text.isBlank()) {
-            Toast.makeText(this, getString(R.string.ocr_no_text), Toast.LENGTH_LONG).show()
+            showScanMessage(getString(R.string.ocr_no_text), long = true)
             return
         }
         if (isScanningBack) {
@@ -238,7 +271,7 @@ class ScanActivity : AppCompatActivity() {
             binding.btnSaveContact.visibility = View.VISIBLE
             binding.btnCapture.visibility = View.GONE
             binding.btnGallery.visibility = View.GONE
-            Toast.makeText(this, getString(R.string.back_scanned), Toast.LENGTH_SHORT).show()
+            showScanMessage(getString(R.string.back_scanned))
         } else {
             replacePreviousImage(frontImagePath, imagePath)
             frontImagePath = imagePath
@@ -247,7 +280,7 @@ class ScanActivity : AppCompatActivity() {
             binding.rowSecondary.visibility = View.VISIBLE
             binding.btnFlip.visibility = View.VISIBLE
             binding.btnSaveContact.visibility = View.VISIBLE
-            Toast.makeText(this, getString(R.string.front_scanned), Toast.LENGTH_SHORT).show()
+            showScanMessage(getString(R.string.front_scanned))
         }
         updateUI()
     }
@@ -263,7 +296,7 @@ class ScanActivity : AppCompatActivity() {
         binding.textOcrResult.text = ""
         binding.rowSecondary.visibility = View.GONE
         updateUI()
-        Toast.makeText(this, getString(R.string.flip_card), Toast.LENGTH_SHORT).show()
+        showScanMessage(getString(R.string.flip_card))
     }
 
     private fun saveContact() {
@@ -293,7 +326,7 @@ class ScanActivity : AppCompatActivity() {
                     .setPositiveButton(R.string.save_anyway) { _, _ ->
                         viewModel.insert(card) {
                             runOnUiThread {
-                                Toast.makeText(this@ScanActivity, getString(R.string.contact_saved), Toast.LENGTH_SHORT).show()
+                                showScanMessage(getString(R.string.contact_saved))
                                 finish()
                             }
                         }
@@ -303,7 +336,7 @@ class ScanActivity : AppCompatActivity() {
             } else {
                 viewModel.insert(card) {
                     runOnUiThread {
-                        Toast.makeText(this@ScanActivity, getString(R.string.contact_saved), Toast.LENGTH_SHORT).show()
+                        showScanMessage(getString(R.string.contact_saved))
                         finish()
                     }
                 }

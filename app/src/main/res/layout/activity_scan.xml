@@ -61,11 +61,39 @@
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
         </LinearLayout>
 
-        <androidx.camera.view.PreviewView
-            android:id="@+id/viewFinder"
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_weight="1">
+
+            <androidx.camera.view.PreviewView
+                android:id="@+id/viewFinder"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/scanMessageCard"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                app:cardBackgroundColor="#CC000000"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="0dp">
+                <TextView
+                    android:id="@+id/textScanMessage"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="24dp"
+                    android:paddingEnd="24dp"
+                    android:paddingTop="14dp"
+                    android:paddingBottom="14dp"
+                    android:textColor="@android:color/white"
+                    android:textSize="15sp"
+                    android:gravity="center" />
+            </com.google.android.material.card.MaterialCardView>
+
+        </FrameLayout>
 
         <ScrollView
             android:layout_width="match_parent"

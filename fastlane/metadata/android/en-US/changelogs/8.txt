@@ -1,0 +1,3 @@
+• New: Dictate Note button directly on the contact screen — tap to speak a thought and it's saved to the contact's notes with a timestamp, no editing required
+• New: Export OCR Log (overflow menu) — exports raw OCR text alongside saved and parsed field values as JSON, useful for identifying and fixing parser gaps
+• Fixed: action buttons (Add Interaction, Record Meeting, Set Reminder) could silently do nothing if tapped immediately after opening a contact

@@ -1,0 +1,3 @@
+• New: Scan confirmation messages now appear as a centered overlay on the camera preview instead of a bottom toast — no longer blocks the action buttons
+• New: Camera auto-focuses on the card center before each capture for sharper OCR results
+• New: About screen now has an "Export Debug" option that bundles all card photos + OCR log into a ZIP file for parser analysis

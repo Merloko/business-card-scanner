@@ -342,8 +342,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_export     -> { exportCsv(); true }
-            R.id.action_export_ocr_log -> { exportOcrLog(); true }
-            R.id.action_backup  -> { backupZip(); true }
+R.id.action_backup  -> { backupZip(); true }
             R.id.action_restore -> { pickBackupFile.launch("*/*"); true }
             R.id.action_about   -> { showAbout(); true }
             R.id.theme_system -> { setNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM); true }
@@ -711,68 +710,6 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, getString(R.string.import_csv_failed, e.message), Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    private fun exportOcrLog() {
-        lifecycleScope.launch {
-            val cards = viewModel.getAllCardsList()
-                .filter { it.rawTextFront.isNotBlank() || it.rawTextBack.isNotBlank() }
-            if (cards.isEmpty()) {
-                Toast.makeText(this@MainActivity, "No cards with OCR data to export", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            val dateFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-            val json = withContext(Dispatchers.Default) {
-                JSONArray().also { arr ->
-                    cards.forEach { card ->
-                        val parsed = TextParser.parse(card.rawTextFront, card.rawTextBack)
-                        arr.put(JSONObject().apply {
-                            put("id", card.id)
-                            put("createdAt", dateFmt.format(Date(card.createdAt)))
-                            put("saved", JSONObject().apply {
-                                put("name",    card.personName)
-                                put("company", card.companyName)
-                                put("title",   card.jobTitle)
-                                put("phone",   card.phone)
-                                put("mobile",  card.mobile)
-                                put("email",   card.email)
-                                put("website", card.website)
-                                put("address", card.address)
-                            })
-                            put("parser", JSONObject().apply {
-                                put("name",    parsed.personName)
-                                put("company", parsed.companyName)
-                                put("title",   parsed.jobTitle)
-                                put("phone",   parsed.phone)
-                                put("mobile",  parsed.mobile)
-                                put("email",   parsed.email)
-                                put("website", parsed.website)
-                                put("address", parsed.address)
-                            })
-                            put("rawFront", card.rawTextFront)
-                            put("rawBack",  card.rawTextBack)
-                        })
-                    }
-                }.toString(2)
-            }
-            val file = File(cacheDir, "exports/ocr_log.json")
-            withContext(Dispatchers.IO) {
-                file.parentFile?.mkdirs()
-                file.writeText(json)
-            }
-            val uri = FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", file)
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/json"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "OCR Log")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            try {
-                startActivity(Intent.createChooser(intent, "Share OCR Log"))
-            } catch (e: ActivityNotFoundException) {
-                Toast.makeText(this@MainActivity, getString(R.string.no_app_for_action), Toast.LENGTH_SHORT).show()
             }
         }
     }

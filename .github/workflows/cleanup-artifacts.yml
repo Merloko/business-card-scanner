@@ -4,8 +4,6 @@ on:
   schedule:
     - cron: '0 2 * * *'  # daily at 2am UTC
   workflow_dispatch:
-  push:
-    branches: [main]
 
 jobs:
   cleanup:

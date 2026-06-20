@@ -35,8 +35,9 @@ object TextParser {
 
     private val JOB_TITLE_KEYWORDS = listOf(
         "ceo", "cto", "cfo", "coo", "director", "manager", "engineer", "developer",
-        "designer", "analyst", "consultant", "president", "founder", "owner",
-        "sales", "marketing", "account", "executive", "officer", "head of",
+        "designer", "analyst", "consultant", "president", "founder", "founding",
+        "owner", "chairman", "secretary", "treasurer",
+        "sales", "marketing", "account", "executive", "officer", "head of ",
         "senior", "junior", "lead", "principal", "associate", "coordinator",
         "specialist", "representative", "advisor", "partner", "vice president", "vp"
     )
@@ -46,10 +47,21 @@ object TextParser {
         "pty", "ltd", "limited", "inc", "corp", "corporation", "llc", "co.",
         "group", "solutions", "services", "technologies", "consulting", "enterprises",
         "holdings", "international", "global", "australia", "pty ltd",
+        // Indonesian / SE Asian
+        "pt ", "tbk", " cv ",
         // Chinese (Simplified & Traditional)
         "有限公司", "股份有限公司", "集团", "企业", "贸易", "科技",
         // Japanese
         "株式会社", "有限会社", "合同会社", "合資会社"
+    )
+
+    private val ADDRESS_WORDS = listOf(
+        "jl.", "jln", "kav", "floor", "tower", "street", "road", "avenue",
+        "blvd", "lane", "drive", "suite", "level "
+    )
+
+    private val GENERIC_EMAIL_DOMAINS = setOf(
+        "gmail", "yahoo", "outlook", "hotmail", "icloud", "proton", "mail", "me"
     )
 
     /** Returns a human-readable breakdown of how each piece of the raw OCR text was classified. */
@@ -88,11 +100,12 @@ object TextParser {
         val candidates = lines.filter { line ->
             skipLines.none { line.contains(it, ignoreCase = true) } &&
             !line.matches(DIGIT_RUN_PATTERN) &&
+            !line.trimEnd().endsWith(',') &&
             line.length in 2..60
         }
         sb.appendLine("Name/company candidates (${candidates.size}):")
         if (candidates.isEmpty()) sb.appendLine("  (all lines were skipped)")
-        candidates.forEach { sb.appendLine("  • $it") }
+        candidates.forEach { sb.appendLine("  • [name=${nameLikelihood(it)}] $it") }
         sb.appendLine()
         sb.append("Skipped because matched phone/email/etc (${skipLines.size}): ${skipLines.joinToString(", ").ifBlank { "(none)" }}")
 
@@ -192,6 +205,8 @@ object TextParser {
         val matcher = WEBSITE_PATTERN.matcher(text)
         while (matcher.find()) {
             val match = matcher.group()
+            // Skip if the match is the local part of an email (immediately followed by '@')
+            if (matcher.end() < text.length && text[matcher.end()] == '@') continue
             if (!match.contains("@") && !match.equals(email, ignoreCase = true)) {
                 return match
             }
@@ -246,45 +261,105 @@ object TextParser {
         val candidates = lines.filter { line ->
             skipLines.none { line.contains(it, ignoreCase = true) } &&
             !line.matches(DIGIT_RUN_PATTERN) &&
+            !line.trimEnd().endsWith(',') && // address fragments end with comma
             line.length in 2..60
         }
 
         var personName = ""
         var companyName = ""
 
+        // First pass: find company by indicator — wins regardless of position in document
         for (line in candidates) {
             val lower = line.lowercase()
-            if (companyName.isEmpty() && COMPANY_INDICATORS.any { lower.contains(it) }) {
+            if (COMPANY_INDICATORS.any { lower.contains(it) }) {
                 companyName = line
-                continue
+                break
             }
-            if (personName.isEmpty() && looksLikeName(line)) {
-                personName = line
-                continue
+        }
+
+        // Name: check lines adjacent to the job title first (name+title co-locate on most cards)
+        if (jobTitle.isNotBlank()) {
+            val jobIdx = lines.indexOf(jobTitle)
+            if (jobIdx >= 0) {
+                outer@ for (offset in listOf(1, -1, 2, -2)) {
+                    val i = jobIdx + offset
+                    if (i < 0 || i >= lines.size) continue
+                    val line = lines[i]
+                    if (skipLines.any { line.contains(it, ignoreCase = true) }) continue
+                    if (line.matches(DIGIT_RUN_PATTERN) || line.trimEnd().endsWith(',')) continue
+                    if (nameLikelihood(line) >= 2) {
+                        personName = line
+                        break@outer
+                    }
+                }
             }
-            if (companyName.isEmpty() && line.length > 3) {
+        }
+
+        // Fall back: prefer score-2 (2+ words) over score-1 (single word)
+        if (personName.isEmpty()) {
+            var bestScore = 0
+            for (line in candidates) {
+                val score = nameLikelihood(line)
+                if (score > bestScore) {
+                    personName = line
+                    bestScore = score
+                    if (bestScore == 2) break
+                }
+            }
+        }
+
+        // Fallback company: first candidate that isn't the person name and isn't address-like
+        if (companyName.isEmpty()) {
+            for (line in candidates) {
+                if (line == personName) continue
+                if (line.length <= 3) continue
+                val lower = line.lowercase()
+                // Skip lines that look like street addresses
+                if (line.any { it.isDigit() } && ADDRESS_WORDS.any { lower.contains(it) }) continue
                 companyName = line
+                break
+            }
+        }
+
+        // Last resort: derive company from website or email domain
+        if (companyName.isEmpty()) {
+            val domain = when {
+                website.isNotBlank() -> website
+                    .substringAfter("://").substringBefore("/")
+                    .removePrefix("www.").substringBefore(".")
+                email.contains("@") -> email.substringAfter("@").substringBefore(".")
+                else -> ""
+            }
+            if (domain.length > 2 && domain.lowercase() !in GENERIC_EMAIL_DOMAINS) {
+                companyName = domain.replaceFirstChar { it.uppercase() }
             }
         }
 
         return Pair(personName, companyName)
     }
 
-    private fun looksLikeName(text: String): Boolean {
+    // Returns 0 = not a name, 1 = possible (single word), 2 = likely (2+ words)
+    private fun nameLikelihood(text: String): Int {
         val trimmed = text.trim()
+        // Lines ending with comma or colon are address/label fragments, not names
+        if (trimmed.endsWith(',') || trimmed.endsWith(':')) return 0
         // CJK names: checked first so the word-count guard below doesn't block names whose
         // characters OCR split into individual tokens (e.g. "张 三 李 四" → 4 words).
         val cjkCount = trimmed.count { CjkUtils.isCjk(it) }
-        if (cjkCount in 1..6 && trimmed.all { it == ' ' || CjkUtils.isCjk(it) }) return true
-        // Latin/mixed names: 1–4 capitalised words
+        if (cjkCount in 1..6 && trimmed.all { it == ' ' || CjkUtils.isCjk(it) }) return 2
+        // Latin/mixed names: 1–4 capitalised words containing only letters, hyphens, apostrophes
         val words = trimmed.split(WHITESPACE)
-        if (words.size !in 1..4) return false
-        return words.all { word ->
-            // Strip trailing punctuation (e.g. "ANDRICH," → "ANDRICH")
+        if (words.size !in 1..4) return 0
+        val allWordsValid = words.all { word ->
             val clean = word.trimEnd(',', '.', ';', ':')
             clean.isNotEmpty() &&
             clean[0].isUpperCase() &&
             clean.all { it.isLetter() || it == '-' || it == '\'' }
         }
+        if (!allWordsValid) return 0
+        // Multi-word names are far more reliable than single words (which could be taglines/places)
+        return if (words.size >= 2) 2 else 1
     }
+
+    private fun looksLikeName(text: String) = nameLikelihood(text) > 0
 }

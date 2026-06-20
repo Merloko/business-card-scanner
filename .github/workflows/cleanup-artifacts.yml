@@ -37,3 +37,24 @@ jobs:
               }
             }
             console.log(`Done. Deleted ${deleted} artifact(s).`);
+
+      - name: Delete all caches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const caches = await github.paginate(
+              github.rest.actions.getActionsCacheList,
+              { owner: context.repo.owner, repo: context.repo.repo, per_page: 100 }
+            );
+
+            let deleted = 0;
+            for (const cache of caches) {
+              await github.rest.actions.deleteActionsCacheById({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                cache_id: cache.id,
+              });
+              console.log(`Deleted cache: ${cache.key} (${cache.id}) — ${(cache.size_in_bytes / 1024 / 1024).toFixed(1)} MB`);
+              deleted++;
+            }
+            console.log(`Done. Deleted ${deleted} cache(s).`);

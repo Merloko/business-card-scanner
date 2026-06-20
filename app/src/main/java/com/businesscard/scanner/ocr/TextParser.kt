@@ -205,8 +205,11 @@ object TextParser {
         val matcher = WEBSITE_PATTERN.matcher(text)
         while (matcher.find()) {
             val match = matcher.group()
-            // Skip if the match is the local part of an email (immediately followed by '@')
-            if (matcher.end() < text.length && text[matcher.end()] == '@') continue
+            val matchStart = matcher.start()
+            val matchEnd = matcher.end()
+            // Skip email local parts (followed by '@') and email domains (preceded by '@')
+            if (matchEnd < text.length && text[matchEnd] == '@') continue
+            if (matchStart > 0 && text[matchStart - 1] == '@') continue
             if (!match.contains("@") && !match.equals(email, ignoreCase = true)) {
                 return match
             }
@@ -285,6 +288,7 @@ object TextParser {
                     val i = jobIdx + offset
                     if (i < 0 || i >= lines.size) continue
                     val line = lines[i]
+                    if (line == companyName) continue // don't pick the company as the name
                     if (skipLines.any { line.contains(it, ignoreCase = true) }) continue
                     if (line.matches(DIGIT_RUN_PATTERN) || line.trimEnd().endsWith(',')) continue
                     if (nameLikelihood(line) >= 2) {
@@ -316,6 +320,8 @@ object TextParser {
                 val lower = line.lowercase()
                 // Skip lines that look like street addresses
                 if (line.any { it.isDigit() } && ADDRESS_WORDS.any { lower.contains(it) }) continue
+                // Skip single-word taglines ending with a period (e.g. "Sustain.", "Innovate.")
+                if (!line.contains(' ') && line.endsWith('.')) continue
                 companyName = line
                 break
             }

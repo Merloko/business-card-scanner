@@ -47,21 +47,27 @@ object TextParser {
         "pty", "ltd", "limited", "inc", "corp", "corporation", "llc", "co.",
         "group", "solutions", "services", "technologies", "consulting", "enterprises",
         "holdings", "international", "global", "australia", "pty ltd",
-        // Indonesian / SE Asian
-        "pt ", "tbk", " cv ",
+        // Indonesian / SE Asian — matched as whole words via COMPANY_WORD_INDICATORS
+        "tbk",
         // Chinese (Simplified & Traditional)
         "有限公司", "股份有限公司", "集团", "企业", "贸易", "科技",
         // Japanese
         "株式会社", "有限会社", "合同会社", "合資会社"
     )
 
+    // Short tokens that would false-match as substrings (e.g. "pt" in "concept", "cv" in "invoice")
+    // — checked as whole whitespace-delimited words only.
+    private val COMPANY_WORD_INDICATORS = setOf("pt", "cv")
+
     private val ADDRESS_WORDS = listOf(
         "jl.", "jln", "kav", "floor", "tower", "street", "road", "avenue",
-        "blvd", "lane", "drive", "suite", "level "
+        "blvd", "lane", "drive", "suite", "level"
     )
 
     private val GENERIC_EMAIL_DOMAINS = setOf(
-        "gmail", "yahoo", "outlook", "hotmail", "icloud", "proton", "mail", "me"
+        "gmail", "yahoo", "outlook", "hotmail", "icloud", "proton", "mail", "me",
+        // Generic SLD labels that are not useful company identifiers
+        "info", "web", "support", "contact", "digital", "media"
     )
 
     /** Returns a human-readable breakdown of how each piece of the raw OCR text was classified. */
@@ -195,10 +201,11 @@ object TextParser {
     // Accepts 7-8 digits (local AU), 10 (AU with area code / mobile), 11 (+61...), 12-15 (other international)
     private fun isValidPhoneDigitCount(count: Int) = count in 7..15
 
-    // Australian mobile: local 04xx or international +614xx
+    // Australian mobile: local 04xx, international +61 4xx, or alternate-prefix 0061 4xx
     private fun isMobile(number: String): Boolean {
         val digits = number.filter { it.isDigit() }
-        return digits.startsWith("04") || digits.startsWith("614")
+        val normalized = if (digits.startsWith("00")) digits.removePrefix("00") else digits
+        return normalized.startsWith("04") || normalized.startsWith("614")
     }
 
     private fun extractWebsite(text: String, email: String): String {
@@ -274,7 +281,9 @@ object TextParser {
         // First pass: find company by indicator — wins regardless of position in document
         for (line in candidates) {
             val lower = line.lowercase()
-            if (COMPANY_INDICATORS.any { lower.contains(it) }) {
+            val words = lower.split(WHITESPACE).toSet()
+            if (COMPANY_INDICATORS.any { lower.contains(it) } ||
+                COMPANY_WORD_INDICATORS.any { it in words }) {
                 companyName = line
                 break
             }
@@ -303,6 +312,7 @@ object TextParser {
         if (personName.isEmpty()) {
             var bestScore = 0
             for (line in candidates) {
+                if (line == companyName) continue
                 val score = nameLikelihood(line)
                 if (score > bestScore) {
                     personName = line

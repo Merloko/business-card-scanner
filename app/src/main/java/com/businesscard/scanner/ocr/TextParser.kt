@@ -60,7 +60,7 @@ object TextParser {
     private val COMPANY_WORD_INDICATORS = setOf("pt", "cv")
 
     private val ADDRESS_WORDS = listOf(
-        "jl.", "jln", "kav", "floor", "tower", "street", "road", "avenue",
+        "jl.", "ji.", "jln", "kav", "floor", "tower", "street", "road", "avenue",
         "blvd", "lane", "drive", "suite", "level"
     )
 
@@ -184,13 +184,16 @@ object TextParser {
     private val ACN_PATTERN = Regex("""(?i)ACN\s*:?\s*\d[\d\s]{6,10}""")
     private val BSB_PATTERN = Regex("""(?i)BSB\s*:?\s*\d[\d\s-]{5,9}""")
     private val TFN_PATTERN = Regex("""(?i)TFN\s*:?\s*\d[\d\s]{6,10}""")
+    // ISO certification numbers like "ISO 9001", "ISO 14001", "ISO 45001"
+    private val ISO_CERT_PATTERN = Regex("""(?i)\bISO\s*\d{4,5}\b""")
 
-    // Erase ABN, ACN, BSB, TFN and similar AU business identifiers before phone matching
+    // Erase ABN, ACN, BSB, TFN, ISO cert numbers and similar business identifiers before phone matching
     private fun stripBusinessIdentifiers(text: String): String = text
         .replace(ABN_PATTERN, "")
         .replace(ACN_PATTERN, "")
         .replace(BSB_PATTERN, "")
         .replace(TFN_PATTERN, "")
+        .replace(ISO_CERT_PATTERN, "")
 
     // Strips trailing text annotations like "(AUS)", "(FAX)" after the last digit
     private fun trimToLastDigit(s: String): String {

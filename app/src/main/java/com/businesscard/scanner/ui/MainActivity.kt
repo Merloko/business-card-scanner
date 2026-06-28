@@ -2,6 +2,8 @@ package com.businesscard.scanner.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.ActionMode
@@ -33,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FilterInputStream
 import java.io.InputStream
@@ -363,6 +366,30 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    // Scales the image to fit within 1200×1200 and re-compresses to JPEG 65.
+    // Reduces typical card photos from ~2–3 MB down to ~150–300 KB.
+    // Falls back to the raw file bytes if decoding fails (corrupt image).
+    private fun compressImageForBackup(path: String): java.io.InputStream {
+        val bitmap = BitmapFactory.decodeFile(path)
+            ?: return File(path).inputStream()
+        val maxDim = 1200
+        val scaled = if (bitmap.width > maxDim || bitmap.height > maxDim) {
+            val ratio = minOf(maxDim.toFloat() / bitmap.width, maxDim.toFloat() / bitmap.height)
+            Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * ratio).toInt(),
+                (bitmap.height * ratio).toInt(),
+                true
+            ).also { if (it !== bitmap) bitmap.recycle() }
+        } else {
+            bitmap
+        }
+        val buf = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 65, buf)
+        scaled.recycle()
+        return buf.toByteArray().inputStream()
+    }
+
     private fun backupZip() {
         lifecycleScope.launch {
             val cards = viewModel.getAllCardsList()
@@ -397,7 +424,7 @@ class MainActivity : AppCompatActivity() {
                                         usedEntryNames.add(entryName)
                                         imageEntries[imgPath] = entryName
                                         zos.putNextEntry(ZipEntry(entryName))
-                                        imgFile.inputStream().use { it.copyTo(zos) }
+                                        compressImageForBackup(imgPath).use { it.copyTo(zos) }
                                         zos.closeEntry()
                                     }
                                 }

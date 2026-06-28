@@ -129,20 +129,20 @@
             android:background="@color/scan_overlay_bg">
 
             <Button
-                android:id="@+id/btnCapture"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="4dp"
-                android:text="@string/capture" />
-
-            <Button
                 android:id="@+id/btnGallery"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
                 android:text="@string/from_gallery" />
+
+            <Button
+                android:id="@+id/btnCapture"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:text="@string/capture" />
         </LinearLayout>
 
         <!-- Secondary action row: appears after front is scanned -->

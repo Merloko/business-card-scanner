@@ -1,0 +1,5 @@
+• Fixed OCR parser incorrectly matching "pt" inside words like "Concept" as an Indonesian company indicator
+• Fixed contact name sometimes being set to the same value as the company name
+• Fixed Australian mobile numbers in 0061-prefix format classified as landlines
+• Fixed "Level5"-style OCR output (no space) not recognised as an address word
+• Simplified menu: Backup and Restore replace the separate CSV import/export items

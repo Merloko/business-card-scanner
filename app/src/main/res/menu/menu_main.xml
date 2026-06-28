@@ -19,24 +19,12 @@
         </menu>
     </item>
     <item
-        android:id="@+id/action_import_vcard"
-        android:title="@string/action_import_vcard"
-        app:showAsAction="never" />
-    <item
-        android:id="@+id/action_import_csv"
-        android:title="@string/action_import_csv"
-        app:showAsAction="never" />
-    <item
-        android:id="@+id/action_export"
-        android:title="Export CSV"
-        app:showAsAction="never" />
-    <item
         android:id="@+id/action_backup"
-        android:title="Backup (JSON)"
+        android:title="Backup"
         app:showAsAction="never" />
     <item
         android:id="@+id/action_restore"
-        android:title="Restore from Backup"
+        android:title="Restore"
         app:showAsAction="never" />
     <item
         android:id="@+id/action_merge_duplicates"

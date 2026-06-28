@@ -25,7 +25,6 @@ import com.businesscard.scanner.App
 import com.businesscard.scanner.BuildConfig
 import com.businesscard.scanner.R
 import com.businesscard.scanner.data.BusinessCard
-import com.businesscard.scanner.data.VCardParser
 import com.businesscard.scanner.databinding.ActivityMainBinding
 import com.businesscard.scanner.util.CsvUtils
 import com.businesscard.scanner.ocr.TextParser
@@ -59,15 +58,6 @@ class MainActivity : AppCompatActivity() {
 
     private val pickBackupFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { restoreFromBackup(it) }
-    }
-
-    // Use "*/*" so both "text/x-vcard" (legacy) and "text/vcard" (RFC 6350) files appear in the picker.
-    private val pickVcfFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { importVCard(it) }
-    }
-
-    private val pickCsvFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { importCsv(it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -329,20 +319,11 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(this, MyCardActivity::class.java))
                 true
             }
-            R.id.action_import_vcard -> {
-                pickVcfFile.launch("*/*")
-                true
-            }
-            R.id.action_import_csv -> {
-                pickCsvFile.launch("*/*")
-                true
-            }
             R.id.action_merge_duplicates -> {
                 startActivity(Intent(this, MergeDuplicatesActivity::class.java))
                 true
             }
-            R.id.action_export     -> { exportCsv(); true }
-R.id.action_backup  -> { backupZip(); true }
+            R.id.action_backup  -> { backupZip(); true }
             R.id.action_restore -> { pickBackupFile.launch("*/*"); true }
             R.id.action_about   -> { showAbout(); true }
             R.id.theme_system -> { setNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM); true }
@@ -621,99 +602,6 @@ R.id.action_backup  -> { backupZip(); true }
         return count
     }
 
-    private fun importVCard(uri: Uri) {
-        lifecycleScope.launch {
-            try {
-                val maxBytes = 5 * 1024 * 1024
-                val bytes = withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.use { it.readBytesWithLimit(maxBytes) }
-                } ?: throw Exception("Could not read file or file exceeds 5 MB limit")
-                val text = bytes.toString(Charsets.UTF_8)
-                val parsed = withContext(Dispatchers.Default) { VCardParser.parse(text) }
-                var imported = 0
-                for (card in parsed) {
-                    val dup = viewModel.findExactDuplicate(card.personName, card.email)
-                        ?: if (card.personName.isBlank() || card.email.isBlank())
-                            viewModel.findDuplicate(card.personName, card.email) else null
-                    if (dup == null) { viewModel.insertNow(card); imported++ }
-                }
-                val msg = if (imported > 0)
-                    getString(R.string.import_vcard_success, imported)
-                else
-                    getString(R.string.import_vcard_none)
-                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, getString(R.string.import_vcard_failed, e.message), Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    private fun importCsv(uri: Uri) {
-        lifecycleScope.launch {
-            try {
-                val maxBytes = 5 * 1024 * 1024
-                val text = withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.use { it.readBytesWithLimit(maxBytes) }
-                        ?: throw Exception("Could not read file or file exceeds 5 MB limit")
-                }.toString(Charsets.UTF_8)
-
-                val csvRows = CsvUtils.parseCsvRows(text)
-                if (csvRows.isEmpty()) throw Exception("File is empty")
-
-                val headers = csvRows[0]
-                val colMap = CsvUtils.mapCsvHeaders(headers)
-                if (colMap.isEmpty()) {
-                    Toast.makeText(this@MainActivity, getString(R.string.import_csv_no_columns), Toast.LENGTH_LONG).show()
-                    return@launch
-                }
-
-                fun cell(row: List<String>, key: String) = colMap[key]?.let { row.getOrNull(it)?.trim() }.orEmpty()
-
-                var imported = 0
-                for (i in 1 until csvRows.size) {
-                    val row = csvRows[i]
-                    if (row.all { it.isBlank() }) continue
-
-                    val firstName = cell(row, "firstName")
-                    val lastName  = cell(row, "lastName")
-                    val fullName  = cell(row, "fullName")
-                    val name = when {
-                        fullName.isNotBlank() -> fullName
-                        firstName.isNotBlank() || lastName.isNotBlank() ->
-                            listOf(firstName, lastName).filter { it.isNotBlank() }.joinToString(" ")
-                        else -> ""
-                    }
-                    val email = cell(row, "email")
-
-                    val card = BusinessCard(
-                        personName  = name,
-                        companyName = cell(row, "company"),
-                        jobTitle    = cell(row, "jobTitle"),
-                        phone       = cell(row, "phone"),
-                        mobile      = cell(row, "mobile"),
-                        email       = email,
-                        website     = cell(row, "website"),
-                        address     = cell(row, "address"),
-                        notes       = cell(row, "notes"),
-                        tags        = cell(row, "tags")
-                    )
-
-                    val dup = viewModel.findExactDuplicate(name, email)
-                        ?: if (name.isBlank() || email.isBlank()) viewModel.findDuplicate(name, email) else null
-                    if (dup == null) { viewModel.insertNow(card); imported++ }
-                }
-
-                val msg = if (imported > 0)
-                    getString(R.string.import_csv_success, imported)
-                else
-                    getString(R.string.import_csv_none)
-                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, getString(R.string.import_csv_failed, e.message), Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
     private fun exportDebugPackage() {
         lifecycleScope.launch {
             val cards = viewModel.getAllCardsList()
@@ -786,37 +674,6 @@ R.id.action_backup  -> { backupZip(); true }
             }
             try {
                 startActivity(Intent.createChooser(intent, "Share Debug Package"))
-            } catch (e: ActivityNotFoundException) {
-                Toast.makeText(this@MainActivity, getString(R.string.no_app_for_action), Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private fun exportCsv() {
-        lifecycleScope.launch {
-            val cards = viewModel.getAllCardsList()
-            if (cards.isEmpty()) {
-                Toast.makeText(this@MainActivity, getString(R.string.no_contacts_to_export), Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            val file = File(cacheDir, "exports/contacts_export.csv")
-            withContext(Dispatchers.IO) {
-                file.parentFile?.mkdirs()
-                file.writeText(CsvUtils.buildCsv(cards))
-            }
-            val uri = FileProvider.getUriForFile(
-                this@MainActivity,
-                "${packageName}.fileprovider",
-                file
-            )
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/csv"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "Business Card Contacts")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            try {
-                startActivity(Intent.createChooser(intent, getString(R.string.export_via_chooser)))
             } catch (e: ActivityNotFoundException) {
                 Toast.makeText(this@MainActivity, getString(R.string.no_app_for_action), Toast.LENGTH_SHORT).show()
             }

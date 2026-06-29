@@ -28,8 +28,9 @@ import com.businesscard.scanner.BuildConfig
 import com.businesscard.scanner.R
 import com.businesscard.scanner.data.BusinessCard
 import com.businesscard.scanner.databinding.ActivityScanBinding
-import com.businesscard.scanner.ocr.TextParser
 import com.businesscard.scanner.ocr.OcrHelper
+import com.businesscard.scanner.ocr.OcrLine
+import com.businesscard.scanner.ocr.TextParser
 import com.google.mlkit.vision.common.InputImage
 import java.io.File
 import java.io.IOException
@@ -44,8 +45,10 @@ class ScanActivity : AppCompatActivity() {
 
     private var frontImagePath = ""
     private var backImagePath = ""
-    private var frontText = ""
-    private var backText = ""
+    private var frontLines: List<com.businesscard.scanner.ocr.OcrLine> = emptyList()
+    private var backLines:  List<com.businesscard.scanner.ocr.OcrLine> = emptyList()
+    private var frontText = ""   // plain text kept for rawTextFront DB field and OCR preview
+    private var backText  = ""   // plain text kept for rawTextBack DB field and OCR preview
     private var isScanningBack = false
     private var eventTag = ""
 
@@ -255,7 +258,8 @@ class ScanActivity : AppCompatActivity() {
             showScanMessage(getString(R.string.image_load_error, e.message), long = true)
             return
         }
-        val text = ocrHelper.recognize(image)
+        val lines = ocrHelper.recognize(image)
+        val text = lines.joinToString("\n") { it.text }
         setBusy(false)
         if (text.isBlank()) {
             showScanMessage(getString(R.string.ocr_no_text), long = true)
@@ -264,7 +268,8 @@ class ScanActivity : AppCompatActivity() {
         if (isScanningBack) {
             replacePreviousImage(backImagePath, imagePath)
             backImagePath = imagePath
-            backText = text
+            backLines = lines
+            backText  = text
             binding.textOcrResult.text = "Back:\n$text"
             binding.rowSecondary.visibility = View.VISIBLE
             binding.btnFlip.visibility = View.GONE
@@ -275,7 +280,8 @@ class ScanActivity : AppCompatActivity() {
         } else {
             replacePreviousImage(frontImagePath, imagePath)
             frontImagePath = imagePath
-            frontText = text
+            frontLines = lines
+            frontText  = text
             binding.textOcrResult.text = "Front:\n$text"
             binding.rowSecondary.visibility = View.VISIBLE
             binding.btnFlip.visibility = View.VISIBLE
@@ -300,7 +306,7 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun saveContact() {
-        val parsed = TextParser.parse(frontText, backText)
+        val parsed = TextParser.parse(frontLines, backLines)
         val initialTags = eventTag.ifBlank { "" }
         val card = BusinessCard(
             personName = parsed.personName,

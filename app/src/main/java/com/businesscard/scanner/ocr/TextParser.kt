@@ -70,14 +70,37 @@ object TextParser {
         "info", "web", "support", "contact", "digital", "media"
     )
 
-    /** Returns a human-readable breakdown of how each piece of the raw OCR text was classified. */
-    fun debugParse(frontText: String, backText: String = ""): String {
+    // ── Public API ────────────────────────────────────────────────────────────
+
+    /** Geometry-aware entry point — use this from live OCR / gallery scan. */
+    fun parse(frontLines: List<OcrLine>, backLines: List<OcrLine> = emptyList()): ParsedContact {
+        val allLines = frontLines + backLines
+        val heightMap = allLines
+            .filter { it.heightPx > 0 }
+            .associate { it.text.trim() to it.heightPx }
+        return parseInternal(allLines.map { it.text }, heightMap)
+    }
+
+    /** String-based entry point — kept for unit tests and legacy callers. */
+    fun parse(frontText: String, backText: String = ""): ParsedContact {
         val allText = "$frontText\n$backText"
         val lines = allText.lines().map { it.trim() }.filter { it.isNotBlank() }
+        return parseInternal(lines, emptyMap())
+    }
+
+    /** Returns a human-readable breakdown of how each piece of the raw OCR text was classified. */
+    fun debugParse(frontLines: List<OcrLine>, backLines: List<OcrLine> = emptyList()): String {
+        val allLines  = frontLines + backLines
+        val lines     = allLines.map { it.text.trim() }.filter { it.isNotBlank() }
+        val heightMap = allLines.filter { it.heightPx > 0 }.associate { it.text.trim() to it.heightPx }
+        val allText   = lines.joinToString("\n")
         val sb = StringBuilder()
 
         sb.appendLine("Lines (${lines.size}):")
-        lines.forEachIndexed { i, line -> sb.appendLine("  [$i] $line") }
+        allLines.filter { it.text.isNotBlank() }.forEachIndexed { i, ol ->
+            val hTag = if (ol.heightPx > 0) " h=${ol.heightPx}px" else ""
+            sb.appendLine("  [$i]$hTag ${ol.text.trim()}")
+        }
         sb.appendLine()
 
         val email = extractEmail(allText)
@@ -97,7 +120,7 @@ object TextParser {
         sb.appendLine("Job title: ${jobTitle.ifBlank { "(none)" }}")
 
         val allPhones = (phone.lines() + mobile.lines()).filter { it.isNotBlank() }
-        val (personName, companyName) = extractNameAndCompany(lines, email, allPhones, website, jobTitle, address)
+        val (personName, companyName) = extractNameAndCompany(lines, email, allPhones, website, jobTitle, address, heightMap)
         sb.appendLine("Name: ${personName.ifBlank { "(none)" }}")
         sb.appendLine("Company: ${companyName.ifBlank { "(none)" }}")
         sb.appendLine()
@@ -111,25 +134,36 @@ object TextParser {
         }
         sb.appendLine("Name/company candidates (${candidates.size}):")
         if (candidates.isEmpty()) sb.appendLine("  (all lines were skipped)")
-        candidates.forEach { sb.appendLine("  • [name=${nameLikelihood(it)}] $it") }
+        candidates.forEach { line ->
+            val h = heightMap[line]?.let { " h=${it}px" } ?: ""
+            sb.appendLine("  • [name=${nameLikelihood(line)}$h] $line")
+        }
         sb.appendLine()
         sb.append("Skipped because matched phone/email/etc (${skipLines.size}): ${skipLines.joinToString(", ").ifBlank { "(none)" }}")
 
         return sb.toString()
     }
 
-    fun parse(frontText: String, backText: String = ""): ParsedContact {
+    /** String-based debugParse — for callers that don't have OcrLine geometry. */
+    fun debugParse(frontText: String, backText: String = ""): String {
         val allText = "$frontText\n$backText"
-        val lines = allText.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val lines = allText.lines().map { OcrLine(it.trim(), 0, 0) }.filter { it.text.isNotBlank() }
+        return debugParse(lines, emptyList())
+    }
 
+    // ── Internal implementation ───────────────────────────────────────────────
+
+    private fun parseInternal(lines: List<String>, heightMap: Map<String, Int>): ParsedContact {
+        val allText = lines.joinToString("\n")
         val email = extractEmail(allText)
         val (phone, mobile) = extractPhones(allText)
         val website = extractWebsite(allText, email)
         val address = extractAddress(lines)
         val jobTitle = extractJobTitle(lines, address)
         val allPhones = (phone.lines() + mobile.lines()).filter { it.isNotBlank() }
-        val (personName, companyName) = extractNameAndCompany(lines, email, allPhones, website, jobTitle, address)
-
+        val (personName, companyName) = extractNameAndCompany(
+            lines, email, allPhones, website, jobTitle, address, heightMap
+        )
         return ParsedContact(
             personName = personName,
             companyName = companyName,
@@ -307,7 +341,8 @@ object TextParser {
         phones: List<String>,
         website: String,
         jobTitle: String,
-        address: String
+        address: String,
+        heightMap: Map<String, Int> = emptyMap()
     ): Pair<String, String> {
         val skipLines = (setOf(email, website, jobTitle, address) + phones)
             .filter { it.isNotBlank() }
@@ -352,16 +387,20 @@ object TextParser {
             }
         }
 
-        // Fall back: prefer score-2 (2+ words) over score-1 (single word)
+        // Fall back: prefer score-2 (2+ words) over score-1 (single word).
+        // Among equal-scoring candidates, prefer the one with the larger bounding-box
+        // height (bigger text on the card is more likely to be the person's name).
         if (personName.isEmpty()) {
             var bestScore = 0
+            var bestHeight = 0
             for (line in candidates) {
                 if (line == companyName) continue
                 val score = nameLikelihood(line)
-                if (score > bestScore) {
+                val height = heightMap[line] ?: 0
+                if (score > bestScore || (score == bestScore && score > 0 && height > bestHeight)) {
                     personName = line
                     bestScore = score
-                    if (bestScore == 2) break
+                    bestHeight = height
                 }
             }
         }

@@ -73,16 +73,16 @@ class EditContactActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     setBusy(true)
                     try {
-                        val frontText = ocrHelper.recognizeFile(this@EditContactActivity, card.frontImagePath)
-                        val backText = ocrHelper.recognizeFile(this@EditContactActivity, card.backImagePath)
+                        val frontLines = ocrHelper.recognizeFile(this@EditContactActivity, card.frontImagePath)
+                        val backLines  = ocrHelper.recognizeFile(this@EditContactActivity, card.backImagePath)
 
-                        if (frontText.isBlank() && backText.isBlank()) {
+                        if (frontLines.isEmpty() && backLines.isEmpty()) {
                             Toast.makeText(this@EditContactActivity,
                                 getString(R.string.rescan_no_images), Toast.LENGTH_LONG).show()
                             return@launch
                         }
 
-                        val parsed = TextParser.parse(frontText, backText)
+                        val parsed = TextParser.parse(frontLines, backLines)
                         // Overwrite parsed fields; leave notes untouched (user-written)
                         if (parsed.personName.isNotBlank())  binding.editPersonName.setText(parsed.personName)
                         if (parsed.companyName.isNotBlank()) binding.editCompanyName.setText(parsed.companyName)

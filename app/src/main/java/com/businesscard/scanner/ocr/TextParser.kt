@@ -252,6 +252,9 @@ object TextParser {
     private fun extractJobTitle(lines: List<String>, addressLine: String = ""): String {
         for (line in lines) {
             if (addressLine.isNotBlank() && line == addressLine) continue
+            // Section headers like "Head Office:" or "Representative Office:" end with a colon
+            // and are not job titles even when they contain a keyword like "representative".
+            if (line.trimEnd().endsWith(':')) continue
             val lower = line.lowercase()
             if (JOB_TITLE_KEYWORDS.any { lower.contains(it) } && line.length < 60) {
                 return line

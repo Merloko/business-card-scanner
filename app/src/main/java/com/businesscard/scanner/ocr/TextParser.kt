@@ -263,6 +263,44 @@ object TextParser {
         return ""
     }
 
+    // Finds the longest run of consecutive lines that look like a multi-word brand logo:
+    // mostly uppercase, short (≤ 25 chars, ≤ 3 words), not already classified elsewhere.
+    // Leading OCR noise characters (pipes, brackets, etc.) are stripped before evaluation.
+    // Returns the joined cluster, or "" if no run of 2+ qualifying lines is found.
+    private fun findAllCapsCluster(
+        lines: List<String>,
+        skipLines: List<String>,
+        personName: String
+    ): String {
+        fun stripped(line: String) = line.dropWhile { !it.isLetter() }.trim()
+
+        fun qualifies(line: String): Boolean {
+            if (skipLines.any { line.contains(it, ignoreCase = true) }) return false
+            if (line == personName) return false
+            val s = stripped(line)
+            if (s.isBlank() || s.length > 25) return false
+            val letters = s.filter { it.isLetter() }
+            if (letters.isEmpty()) return false
+            val upperRatio = letters.count { it.isUpperCase() }.toFloat() / letters.length
+            return upperRatio >= 0.75f && s.split(WHITESPACE).size <= 3
+        }
+
+        var best = listOf<String>()
+        var run = mutableListOf<String>()
+
+        for (line in lines) {
+            if (qualifies(line)) {
+                run.add(stripped(line))
+            } else {
+                if (run.size >= 2 && run.size > best.size) best = run.toList()
+                run = mutableListOf()
+            }
+        }
+        if (run.size >= 2 && run.size > best.size) best = run.toList()
+
+        return best.joinToString(" ")
+    }
+
     private fun extractNameAndCompany(
         lines: List<String>,
         email: String,
@@ -326,6 +364,12 @@ object TextParser {
                     if (bestScore == 2) break
                 }
             }
+        }
+
+        // Second pass: look for a run of 2+ consecutive all-caps short lines — multi-word brand
+        // logos are often typeset one word per line in large uppercase text on physical cards.
+        if (companyName.isEmpty()) {
+            companyName = findAllCapsCluster(lines, skipLines, personName)
         }
 
         // Fallback company: first candidate that isn't the person name and isn't address-like

@@ -95,6 +95,71 @@ class TextParserTest {
         assertNotEquals("john smith", result.personName)
     }
 
+    // ──── All-caps cluster company detection ────
+
+    @Test fun `multi-line all-caps brand logo joined as company`() {
+        // Simulates Indonesian card with company name split across lines, no suffix indicator
+        val ocr = """
+            Corporate Secretary
+            Imelda Agustina Kiagoes
+            imelda@cerindocorp.com
+            INDOTAMA
+            NUGRAHA
+            CERIA
+            YKAN
+        """.trimIndent()
+        val result = TextParser.parse(ocr)
+        assertEquals("Imelda Agustina Kiagoes", result.personName)
+        assertTrue("company should contain INDOTAMA", result.companyName.contains("INDOTAMA"))
+        assertTrue("company should contain NUGRAHA", result.companyName.contains("NUGRAHA"))
+    }
+
+    @Test fun `leading pipe characters stripped before cluster evaluation`() {
+        val ocr = """
+            Business Development Manager
+            Amando Kaligis
+            amando@cerindocorp.com
+            |INDOTAMA
+            NUGRAHA
+            |CERIA
+        """.trimIndent()
+        val result = TextParser.parse(ocr)
+        assertTrue("company should contain INDOTAMA", result.companyName.contains("INDOTAMA"))
+        assertTrue("company should contain NUGRAHA", result.companyName.contains("NUGRAHA"))
+    }
+
+    @Test fun `single all-caps line does not trigger cluster`() {
+        // Cluster requires 2+ consecutive lines — single word stays as regular fallback
+        val ocr = "John Smith\nCEO\nACME\njohn@acme.com"
+        val result = TextParser.parse(ocr)
+        // Should not join a single-line cluster; company found by other means or fallback
+        assertFalse("single all-caps line should not create a cluster company containing a space",
+            result.companyName == "ACME ACME")
+    }
+
+    @Test fun `title-case taglines do not trigger cluster`() {
+        // "Sustain." "Innovate." are title-case with periods — upperRatio < 0.75
+        val ocr = """
+            cboccamazzo@wyloo.com
+            T: +618 9476 7200
+            Principal, Corporate Development
+            Caitlin Boccamazzo
+            Sustain.
+            Innovate.
+            Unearth.
+        """.trimIndent()
+        val result = TextParser.parse(ocr)
+        assertEquals("Caitlin Boccamazzo", result.personName)
+        assertFalse("taglines should not become company", result.companyName.contains("Sustain"))
+    }
+
+    @Test fun `indicator pass wins over cluster when both present`() {
+        // "Pty Ltd" triggers the indicator pass first — cluster never fires
+        val ocr = "Jane Doe\nCEO\nACME\nPty Ltd\nBIG\nBRAND"
+        val result = TextParser.parse(ocr)
+        assertTrue("indicator-based company should win", result.companyName.contains("Pty Ltd"))
+    }
+
     // ──── Field extraction ────
 
     @Test fun `email extracted`() {

@@ -13,6 +13,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -33,13 +35,18 @@ jobs:
       - name: Build debug APK and run unit tests
         run: ./gradlew assembleDebug testDebugUnitTest --no-daemon
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+      - name: Publish dev APK to latest-dev release
+        if: github.ref == 'refs/heads/main'
+        uses: ncipollo/release-action@v1
         with:
-          name: debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 3
-          overwrite: true
+          tag: latest-dev
+          name: "Dev Build (latest main)"
+          body: "Debug build from commit ${{ github.sha }}. Not a stable release."
+          prerelease: true
+          allowUpdates: true
+          replacesArtifacts: true
+          artifacts: "app/build/outputs/apk/debug/*.apk"
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   release:
     needs: build

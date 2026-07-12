@@ -331,20 +331,16 @@ class ScanActivity : AppCompatActivity() {
                     .setMessage(getString(R.string.possible_duplicate_message, duplicate.personName))
                     .setPositiveButton(R.string.save_anyway) { _, _ ->
                         viewModel.insert(card) {
-                            runOnUiThread {
-                                showScanMessage(getString(R.string.contact_saved))
-                                finish()
-                            }
+                            showScanMessage(getString(R.string.contact_saved))
+                            finish()
                         }
                     }
                     .setNegativeButton(R.string.cancel, null)
                     .show()
             } else {
                 viewModel.insert(card) {
-                    runOnUiThread {
-                        showScanMessage(getString(R.string.contact_saved))
-                        finish()
-                    }
+                    showScanMessage(getString(R.string.contact_saved))
+                    finish()
                 }
             }
         }

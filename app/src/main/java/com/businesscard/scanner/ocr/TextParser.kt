@@ -64,6 +64,13 @@ object TextParser {
         "blvd", "lane", "drive", "suite", "level"
     )
 
+    private val ADDRESS_PATTERNS = listOf(
+        Regex("""\d+\s+\w+.*(street|st|avenue|ave|road|rd|drive|dr|lane|ln|way|blvd|boulevard|court|ct|place|pl)""", RegexOption.IGNORE_CASE),
+        Regex("""(po box|p\.o\. box)\s*\d+""", RegexOption.IGNORE_CASE),
+        Regex("""(nsw|vic|qld|wa|sa|tas|act|nt)\s*\d{4}""", RegexOption.IGNORE_CASE),
+        Regex("""[a-zA-Z]{3,}.*\b\d{4}\b|\b\d{4}\b.*[a-zA-Z]{3,}""")
+    )
+
     private val GENERIC_EMAIL_DOMAINS = setOf(
         "gmail", "yahoo", "outlook", "hotmail", "icloud", "proton", "mail", "me",
         // Generic SLD labels that are not useful company identifiers
@@ -93,7 +100,6 @@ object TextParser {
         val allLines  = frontLines + backLines
         val lines     = allLines.map { it.text.trim() }.filter { it.isNotBlank() }
         val heightMap = allLines.filter { it.heightPx > 0 }.associate { it.text.trim() to it.heightPx }
-        val allText   = lines.joinToString("\n")
         val sb = StringBuilder()
 
         sb.appendLine("Lines (${lines.size}):")
@@ -103,29 +109,19 @@ object TextParser {
         }
         sb.appendLine()
 
-        val email = extractEmail(allText)
-        sb.appendLine("Email: ${email.ifBlank { "(none)" }}")
-
-        val (phone, mobile) = extractPhones(allText)
-        sb.appendLine("Phone: ${phone.ifBlank { "(none)" }}")
-        sb.appendLine("Mobile: ${mobile.ifBlank { "(none)" }}")
-
-        val website = extractWebsite(allText, email)
-        sb.appendLine("Website: ${website.ifBlank { "(none)" }}")
-
-        val address = extractAddress(lines)
-        sb.appendLine("Address: ${address.ifBlank { "(none)" }}")
-
-        val jobTitle = extractJobTitle(lines, address)
-        sb.appendLine("Job title: ${jobTitle.ifBlank { "(none)" }}")
-
-        val allPhones = (phone.lines() + mobile.lines()).filter { it.isNotBlank() }
-        val (personName, companyName) = extractNameAndCompany(lines, email, allPhones, website, jobTitle, address, heightMap)
-        sb.appendLine("Name: ${personName.ifBlank { "(none)" }}")
-        sb.appendLine("Company: ${companyName.ifBlank { "(none)" }}")
+        val parsed = parseInternal(lines, heightMap)
+        sb.appendLine("Email: ${parsed.email.ifBlank { "(none)" }}")
+        sb.appendLine("Phone: ${parsed.phone.ifBlank { "(none)" }}")
+        sb.appendLine("Mobile: ${parsed.mobile.ifBlank { "(none)" }}")
+        sb.appendLine("Website: ${parsed.website.ifBlank { "(none)" }}")
+        sb.appendLine("Address: ${parsed.address.ifBlank { "(none)" }}")
+        sb.appendLine("Job title: ${parsed.jobTitle.ifBlank { "(none)" }}")
+        sb.appendLine("Name: ${parsed.personName.ifBlank { "(none)" }}")
+        sb.appendLine("Company: ${parsed.companyName.ifBlank { "(none)" }}")
         sb.appendLine()
 
-        val skipLines = (setOf(email, website, jobTitle, address) + allPhones).filter { it.isNotBlank() }
+        val allPhones = (parsed.phone.lines() + parsed.mobile.lines()).filter { it.isNotBlank() }
+        val skipLines = (setOf(parsed.email, parsed.website, parsed.jobTitle, parsed.address) + allPhones).filter { it.isNotBlank() }
         val candidates = lines.filter { line ->
             skipLines.none { line.contains(it, ignoreCase = true) } &&
             !line.matches(DIGIT_RUN_PATTERN) &&
@@ -262,21 +258,13 @@ object TextParser {
     }
 
     private fun extractAddress(lines: List<String>): String {
-        val addressPatterns = listOf(
-            Regex("""\d+\s+\w+.*(street|st|avenue|ave|road|rd|drive|dr|lane|ln|way|blvd|boulevard|court|ct|place|pl)""", RegexOption.IGNORE_CASE),
-            Regex("""(po box|p\.o\. box)\s*\d+""", RegexOption.IGNORE_CASE),
-            // Postcode must be preceded by a state abbreviation to avoid matching phone fragments
-            Regex("""(nsw|vic|qld|wa|sa|tas|act|nt)\s*\d{4}""", RegexOption.IGNORE_CASE),
-            // 4-digit postcode only when the line also contains a suburb/state word, not just digits
-            Regex("""[a-zA-Z]{3,}.*\b\d{4}\b|\b\d{4}\b.*[a-zA-Z]{3,}""")
-        )
         for (line in lines) {
             // Skip lines that are phone numbers
             val digitRatio = line.count { it.isDigit() }.toFloat() / line.length.coerceAtLeast(1)
             if (digitRatio > 0.5f) continue
             if (PHONE_LABEL_PATTERN.matcher(line).find()) continue
             if (PHONE_PATTERN.matcher(line).find()) continue
-            for (pattern in addressPatterns) {
+            for (pattern in ADDRESS_PATTERNS) {
                 if (pattern.containsMatchIn(line)) return line
             }
         }
@@ -308,10 +296,9 @@ object TextParser {
     ): String {
         fun stripped(line: String) = line.dropWhile { !it.isLetter() }.trim()
 
-        fun qualifies(line: String): Boolean {
+        fun qualifies(line: String, s: String): Boolean {
             if (skipLines.any { line.contains(it, ignoreCase = true) }) return false
             if (line == personName) return false
-            val s = stripped(line)
             if (s.isBlank() || s.length > 25) return false
             val letters = s.filter { it.isLetter() }
             if (letters.isEmpty()) return false
@@ -323,8 +310,9 @@ object TextParser {
         var run = mutableListOf<String>()
 
         for (line in lines) {
-            if (qualifies(line)) {
-                run.add(stripped(line))
+            val s = stripped(line)
+            if (qualifies(line, s)) {
+                run.add(s)
             } else {
                 if (run.size >= 2 && run.size > best.size) best = run.toList()
                 run = mutableListOf()

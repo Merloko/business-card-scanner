@@ -253,28 +253,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshTagFilter() {
-        lifecycleScope.launch {
-            val tags = viewModel.getAllTags()
-            if (tags.isEmpty()) {
-                binding.tagFilterScroll.visibility = android.view.View.GONE
-                return@launch
-            }
-            binding.tagFilterScroll.visibility = android.view.View.VISIBLE
-            val activeTag = viewModel.getTagFilter()
-            val chipGroup = binding.chipGroupFilter
-            chipGroup.removeAllViews()
-            tags.forEach { tag ->
-                val chip = com.google.android.material.chip.Chip(this@MainActivity).apply {
-                    text = tag
-                    isCheckable = true
-                    isChecked = (tag == activeTag)
-                    setOnCheckedChangeListener { _, isChecked ->
-                        if (isChecked) viewModel.setTagFilter(tag)
-                        else viewModel.setTagFilter("")
-                    }
+        val tags = viewModel.getAllTags()
+        if (tags.isEmpty()) {
+            binding.tagFilterScroll.visibility = android.view.View.GONE
+            return
+        }
+        binding.tagFilterScroll.visibility = android.view.View.VISIBLE
+        val activeTag = viewModel.getTagFilter()
+        val chipGroup = binding.chipGroupFilter
+        chipGroup.removeAllViews()
+        tags.forEach { tag ->
+            val chip = com.google.android.material.chip.Chip(this).apply {
+                text = tag
+                isCheckable = true
+                isChecked = (tag == activeTag)
+                setOnCheckedChangeListener { _, isChecked ->
+                    if (isChecked) viewModel.setTagFilter(tag)
+                    else viewModel.setTagFilter("")
                 }
-                chipGroup.addView(chip)
             }
+            chipGroup.addView(chip)
         }
     }
 
@@ -366,27 +364,21 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    // Scales the image to fit within 1200×1200 and re-compresses to JPEG 65.
-    // Reduces typical card photos from ~2–3 MB down to ~150–300 KB.
-    // Falls back to the raw file bytes if decoding fails (corrupt image).
+    // Subsamples and re-compresses to JPEG 65 to fit within 1200px on either dimension.
+    // Uses a two-pass decode (inJustDecodeBounds then inSampleSize) so the full-resolution
+    // bitmap is never allocated — avoids OOM on large card libraries during backup.
     private fun compressImageForBackup(path: String): java.io.InputStream {
-        val bitmap = BitmapFactory.decodeFile(path)
-            ?: return File(path).inputStream()
         val maxDim = 1200
-        val scaled = if (bitmap.width > maxDim || bitmap.height > maxDim) {
-            val ratio = minOf(maxDim.toFloat() / bitmap.width, maxDim.toFloat() / bitmap.height)
-            Bitmap.createScaledBitmap(
-                bitmap,
-                (bitmap.width * ratio).toInt(),
-                (bitmap.height * ratio).toInt(),
-                true
-            ).also { if (it !== bitmap) bitmap.recycle() }
-        } else {
-            bitmap
-        }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0) return File(path).inputStream()
+        var sample = 1
+        while (bounds.outWidth / sample > maxDim || bounds.outHeight / sample > maxDim) sample *= 2
+        val bitmap = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: return File(path).inputStream()
         val buf = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.JPEG, 65, buf)
-        scaled.recycle()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 65, buf)
+        bitmap.recycle()
         return buf.toByteArray().inputStream()
     }
 

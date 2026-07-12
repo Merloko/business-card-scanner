@@ -24,16 +24,16 @@ class BusinessCardViewModel(application: Application) : AndroidViewModel(applica
 
     val duplicateIds: LiveData<Set<Long>> = MediatorLiveData<Set<Long>>().also { mediator ->
         mediator.addSource(allCards) { cards ->
-            val ids = mutableSetOf<Long>()
-            cards.filter { it.personName.isNotBlank() }
-                .groupBy { it.personName.trim().lowercase() }
-                .values.filter { it.size > 1 }
-                .forEach { group -> group.forEach { ids.add(it.id) } }
-            cards.filter { it.email.isNotBlank() }
-                .groupBy { it.email.trim().lowercase() }
-                .values.filter { it.size > 1 }
-                .forEach { group -> group.forEach { ids.add(it.id) } }
-            mediator.value = ids
+            val byName  = mutableMapOf<String, MutableList<Long>>()
+            val byEmail = mutableMapOf<String, MutableList<Long>>()
+            for (card in cards) {
+                if (card.personName.isNotBlank()) byName.getOrPut(card.personName.trim().lowercase()) { mutableListOf() }.add(card.id)
+                if (card.email.isNotBlank())      byEmail.getOrPut(card.email.trim().lowercase())     { mutableListOf() }.add(card.id)
+            }
+            mediator.value = (byName.values + byEmail.values)
+                .filter { it.size > 1 }
+                .flatten()
+                .toSet()
         }
     }
 
@@ -83,9 +83,9 @@ class BusinessCardViewModel(application: Application) : AndroidViewModel(applica
     fun setSortOrder(order: SortOrder) { _sortOrder.value = order }
     fun getSortOrder(): SortOrder = _sortOrder.value ?: SortOrder.NAME_ASC
 
-    suspend fun getAllTags(): List<String> =
-        repository.getAllTagStrings()
-            .flatMap { it.split(",") }
+    fun getAllTags(): List<String> =
+        (allCards.value ?: emptyList())
+            .flatMap { it.tags.split(",") }
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()

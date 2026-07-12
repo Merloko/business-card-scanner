@@ -1,0 +1,5 @@
+OCR improvements: multi-line brand logo detection (e.g. INDOTAMA / NUGRAHA across lines), smarter job title extraction, better Indonesian address recognition.
+
+Performance: backup no longer runs out of memory on large card libraries; tag filter no longer queries the database on every update.
+
+UI: Gallery and Capture buttons swapped for easier one-handed use. Backup photos are now compressed, reducing backup file size significantly.

@@ -15,8 +15,8 @@ android {
         applicationId = "com.businesscard.scanner"
         minSdk = 29
         targetSdk = 34
-        versionCode = 10
-        versionName = "1.4.6"
+        versionCode = 11
+        versionName = "1.4.7"
         val buildDate = SimpleDateFormat("yyyy-MM-dd").format(Date())
         buildConfigField("String", "BUILD_DATE", "\"$buildDate\"")
         resourceConfigurations += setOf("en", "zh", "zh-rCN", "zh-rTW", "ja")

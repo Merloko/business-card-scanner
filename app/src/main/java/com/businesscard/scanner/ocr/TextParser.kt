@@ -23,14 +23,14 @@ object TextParser {
 
     // Label prefixes like "T:", "M:", "Ph:", "Mobile:", "Tel:", "F:" before a number
     private val PHONE_LABEL_PATTERN = Pattern.compile(
-        """(?:^|(?<=\s))(?:t|m|f|tel|mob|mobile|ph|phone|fax|direct|office)\s*[:\-]\s*([\d\s\-()+.]{7,})""",
+        """(?:^|(?<=\s))(?:t|m|f|tel|mob|mobile|ph|phone|fax|direct|office)\s*[:\-\.]\s*([\d\s\-()+.]{7,})""",
         Pattern.CASE_INSENSITIVE or Pattern.MULTILINE
     )
 
     private val EMAIL_PATTERN = Patterns.EMAIL_ADDRESS
 
     private val WEBSITE_PATTERN = Pattern.compile(
-        """(?:https?://)?(?:www\.)?[a-zA-Z0-9][a-zA-Z0-9\-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}(?:/\S*)?"""
+        """(?:https?://)?(?:www\.)?[a-zA-Z0-9][a-zA-Z0-9\-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,3})?(?:/\S*)?"""
     )
 
     private val JOB_TITLE_KEYWORDS = listOf(
@@ -75,6 +75,24 @@ object TextParser {
         "gmail", "yahoo", "outlook", "hotmail", "icloud", "proton", "mail", "me",
         // Generic SLD labels that are not useful company identifiers
         "info", "web", "support", "contact", "digital", "media"
+    )
+
+    // Lines matching any of these patterns are certification badges, marketing CTAs,
+    // or other noise that should never be assigned to name/company/title fields.
+    private val NOISE_LINE_PATTERNS = listOf(
+        Regex("""(?i)\bISO\s*\d{4,5}\b"""),
+        Regex("""(?i)\bAS/?NZS\b"""),
+        Regex("""(?i)\bOHSAS\b"""),
+        Regex("""(?i)\bJAS[-\s]?ANZ\b"""),
+        Regex("""(?i)\bT[UÜ]V\b"""),
+        Regex("""(?i)\bCertified\s+System\b"""),
+        Regex("""(?i)\bQuality\s+Management\b"""),
+        Regex("""(?i)\bKomite\s+Akreditasi\b"""),
+        Regex("""(?i)\bLSSM-\w+\b"""),
+        Regex("""(?i)\bLP-\d{3,}-\w+\b"""),
+        Regex("""(?i)\bPRINTED\s+ON\b"""),
+        Regex("""(?i)\bSCAN\s+(my|your)\b"""),
+        Regex("""(?i)^VISIT\s+\S+\.(com|net|org|au)\b"""),
     )
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -152,9 +170,12 @@ object TextParser {
     private fun parseInternal(lines: List<String>, heightMap: Map<String, Int>): ParsedContact {
         val allText = lines.joinToString("\n")
         val email = extractEmail(allText)
-        val (phone, mobile) = extractPhones(allText)
+        val (rawPhone, rawMobile) = extractPhones(allText)
         val website = extractWebsite(allText, email)
         val address = extractAddress(lines)
+        // Strip address street-number digits that crept into phone/mobile strings
+        val phone  = removeAddressDigitsFromPhone(rawPhone,  address)
+        val mobile = removeAddressDigitsFromPhone(rawMobile, address)
         val jobTitle = extractJobTitle(lines, address)
         val allPhones = (phone.lines() + mobile.lines()).filter { it.isNotBlank() }
         val (personName, companyName) = extractNameAndCompany(
@@ -174,7 +195,24 @@ object TextParser {
 
     private fun extractEmail(text: String): String {
         val matcher = EMAIL_PATTERN.matcher(text)
-        return if (matcher.find()) matcher.group() else ""
+        if (matcher.find()) return matcher.group()
+
+        // Recovery 1: spaces around @ — e.g. "pvaneck@ simcraftgroup.com.au"
+        val collapsed = text.replace(Regex("""\s*@\s*"""), "@")
+        val m2 = EMAIL_PATTERN.matcher(collapsed)
+        if (m2.find()) return m2.group()
+
+        // Recovery 2: @ OCR'd as 'a' with a space — e.g. "georgie athesandbox.com.au"
+        // Pattern: localpart<space>a<domain.tld>  where domain has at least one dot
+        val aFused = Regex("""([a-zA-Z0-9._%+\-]{2,})\s+a([a-zA-Z0-9][a-zA-Z0-9\-.]*\.[a-zA-Z]{2,6}(?:\.[a-zA-Z]{2,3})?)""")
+        for (line in text.lines()) {
+            if ('@' in line) continue
+            val m = aFused.find(line) ?: continue
+            val candidate = "${m.groupValues[1]}@${m.groupValues[2]}"
+            if (EMAIL_PATTERN.matcher(candidate).matches()) return candidate
+        }
+
+        return ""
     }
 
     // Returns Pair(landlines, mobiles) — both as newline-joined strings
@@ -234,11 +272,14 @@ object TextParser {
     // Accepts 7-8 digits (local AU), 10 (AU with area code / mobile), 11 (+61...), 12-15 (other international)
     private fun isValidPhoneDigitCount(count: Int) = count in 7..15
 
-    // Australian mobile: local 04xx, international +61 4xx, or alternate-prefix 0061 4xx
+    // Australian mobile: local 04xx, international +61 4xx
+    // Indonesian mobile:  +62 8xx (country code 62, all mobile prefixes start with 8)
     private fun isMobile(number: String): Boolean {
         val digits = number.filter { it.isDigit() }
         val normalized = if (digits.startsWith("00")) digits.removePrefix("00") else digits
-        return normalized.startsWith("04") || normalized.startsWith("614")
+        return normalized.startsWith("04") ||
+               normalized.startsWith("614") ||
+               normalized.startsWith("628")
     }
 
     private fun extractWebsite(text: String, email: String): String {
@@ -272,13 +313,24 @@ object TextParser {
     }
 
     private fun extractJobTitle(lines: List<String>, addressLine: String = ""): String {
-        for (line in lines) {
+        for ((idx, line) in lines.withIndex()) {
             if (addressLine.isNotBlank() && line == addressLine) continue
             // Section headers like "Head Office:" or "Representative Office:" end with a colon
             // and are not job titles even when they contain a keyword like "representative".
             if (line.trimEnd().endsWith(':')) continue
             val lower = line.lowercase()
             if (JOB_TITLE_KEYWORDS.any { lower.contains(it) } && line.length < 60) {
+                // Join a continuation line when the title ends with & / and /
+                val trailing = line.trimEnd()
+                if (idx + 1 < lines.size &&
+                    (trailing.endsWith('&') || trailing.endsWith('/') ||
+                     trailing.lowercase().endsWith(" and"))) {
+                    val next = lines[idx + 1]
+                    if (!next.trimEnd().endsWith(':') && next.length < 40 &&
+                        !next.matches(DIGIT_RUN_PATTERN)) {
+                        return "$line $next"
+                    }
+                }
                 return line
             }
         }
@@ -339,19 +391,24 @@ object TextParser {
             skipLines.none { line.contains(it, ignoreCase = true) } &&
             !line.matches(DIGIT_RUN_PATTERN) &&
             !line.trimEnd().endsWith(',') && // address fragments end with comma
+            !isNoiseLine(line) &&
             line.length in 2..60
         }
 
         var personName = ""
         var companyName = ""
 
-        // First pass: find company by indicator — wins regardless of position in document
-        for (line in candidates) {
+        // First pass: find company by indicator — wins regardless of position in document.
+        // When the indicator line is a pure suffix (e.g. "PTY. LTD."), prepend the
+        // immediately preceding candidate so the full name is captured.
+        for ((idx, line) in candidates.withIndex()) {
             val lower = line.lowercase()
             val words = lower.split(WHITESPACE).toSet()
             if (COMPANY_INDICATORS.any { lower.contains(it) } ||
                 COMPANY_WORD_INDICATORS.any { it in words }) {
-                companyName = line
+                val prev = if (idx > 0) candidates[idx - 1] else null
+                companyName = if (prev != null && looksLikeCompanyFragment(prev, skipLines))
+                    "$prev $line" else line
                 break
             }
         }
@@ -455,4 +512,33 @@ object TextParser {
     }
 
     private fun looksLikeName(text: String) = nameLikelihood(text) > 0
+
+    private fun isNoiseLine(line: String) = NOISE_LINE_PATTERNS.any { it.containsMatchIn(line) }
+
+    // Returns true when a line looks like it could be the first part of a company name
+    // (not a contact detail, not a job title keyword, not already classified as noise).
+    private fun looksLikeCompanyFragment(line: String, skipLines: List<String>): Boolean {
+        if (skipLines.any { line.contains(it, ignoreCase = true) }) return false
+        if (isNoiseLine(line)) return false
+        if (line.matches(DIGIT_RUN_PATTERN)) return false
+        if (line.trimEnd().endsWith(',') || line.trimEnd().endsWith(':')) return false
+        val lower = line.lowercase()
+        if (JOB_TITLE_KEYWORDS.any { lower.contains(it) }) return false
+        return line.length in 2..60
+    }
+
+    // Strips trailing tokens from a phone/mobile string when they are digit-only and
+    // match the leading street number in the address (e.g. "9258 3033\n108" when the
+    // address is "108 Radium Street").
+    private fun removeAddressDigitsFromPhone(phone: String, address: String): String {
+        if (address.isBlank() || phone.isBlank()) return phone
+        val addrLeadDigits = address.trimStart().takeWhile { it.isDigit() }
+        if (addrLeadDigits.isEmpty()) return phone
+        return phone.lines().map { line ->
+            val lastToken = line.trimEnd().substringAfterLast(' ')
+            if (lastToken.all { it.isDigit() } && lastToken == addrLeadDigits)
+                line.substringBeforeLast(' ').trimEnd()
+            else line
+        }.filter { it.isNotBlank() }.joinToString("\n")
+    }
 }
